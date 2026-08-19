@@ -1,1 +1,2 @@
 - [Qt qmake on Replit](replit-qt-qmake.md) — Qt modules use split Nix outputs; build through the path-discovering helper instead of bare qmake.
+- [GitHub REST history reconciliation](github-rest-history-reconciliation.md) — repos populated through API commits need explicit local-history reconciliation before normal Git sync.
