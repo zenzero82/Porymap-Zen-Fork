@@ -64,6 +64,19 @@ jobs:
         shell: pwsh
         run: mingw32-make -j2
 
+      - name: Smoke test executable
+        shell: pwsh
+        run: |
+          $env:QT_QPA_PLATFORM = "offscreen"
+          $process = Start-Process -FilePath "$PWD\release\porymap.exe" -PassThru
+          Start-Sleep -Seconds 5
+          $process.Refresh()
+          if ($process.HasExited) {
+            throw "Porymap Studio exited during the startup smoke test with code $($process.ExitCode)."
+          }
+          Stop-Process -Id $process.Id -Force
+          $process.WaitForExit()
+
       - name: Upload test artifact
         uses: actions/upload-artifact@v4
         with:
