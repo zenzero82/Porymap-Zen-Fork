@@ -38,7 +38,7 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Install Qt and MinGW
+      - name: Install Qt and matching MinGW
         uses: jurplel/install-qt-action@v4
         with:
           version: '6.8.*'
@@ -47,32 +47,22 @@ jobs:
           arch: win64_mingw
           modules: 'qtcharts'
           cache: true
+          tools: tools_mingw1310,qt.tools.win64_mingw1310
+          add-tools-to-path: true
 
       - name: Configure
         shell: pwsh
         run: qmake -config release porymap.pro
 
-      - name: Compile
+      - name: Verify compiler toolchain
         shell: pwsh
         run: |
-          mingw32-make -j2 2>&1 | Tee-Object -FilePath windows-build.log
-          if ($LASTEXITCODE -ne 0) {
-            $errorLines = Get-Content -Path windows-build.log | Where-Object {
-              $_ -match "(?i)(fatal error:|error:|undefined reference|collect2:|mingw32-make: \*\*\*|cannot find|no such file)"
-            }
-            $diagnosticLines = if ($errorLines) { $errorLines | Select-Object -Last 20 } else { Get-Content -Path windows-build.log -Tail 8 }
-            $message = ($diagnosticLines -join "`n").Replace("%", "%25").Replace("`r", "%0D").Replace("`n", "%0A")
-            Write-Output "::error title=Windows MinGW build output::$message"
-            exit $LASTEXITCODE
-          }
+          g++ --version
+          mingw32-make --version
 
-      - name: Upload Windows build log on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: porymap-studio-windows-build-log-${{ github.sha }}
-          path: windows-build.log
-          if-no-files-found: warn
+      - name: Compile
+        shell: pwsh
+        run: mingw32-make -j2
 
       - name: Upload test artifact
         uses: actions/upload-artifact@v4
