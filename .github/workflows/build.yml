@@ -57,7 +57,11 @@ jobs:
         run: |
           mingw32-make -j2 2>&1 | Tee-Object -FilePath windows-build.log
           if ($LASTEXITCODE -ne 0) {
-            $message = ((Get-Content -Path windows-build.log -Tail 40) -join "`n").Replace("%", "%25").Replace("`r", "%0D").Replace("`n", "%0A")
+            $errorLines = Get-Content -Path windows-build.log | Where-Object {
+              $_ -match "(?i)(fatal error:|error:|undefined reference|collect2:|mingw32-make: \*\*\*|cannot find|no such file)"
+            }
+            $diagnosticLines = if ($errorLines) { $errorLines | Select-Object -Last 20 } else { Get-Content -Path windows-build.log -Tail 8 }
+            $message = ($diagnosticLines -join "`n").Replace("%", "%25").Replace("`r", "%0D").Replace("`n", "%0A")
             Write-Output "::error title=Windows MinGW build output::$message"
             exit $LASTEXITCODE
           }
