@@ -30,6 +30,9 @@ RC_ICONS = resources/icons/porymap-icon-2.ico
 ICON = resources/icons/porymap.icns
 QMAKE_CXXFLAGS += -std=c++17 -Wall
 QMAKE_TARGET_BUNDLE_PREFIX = com.pret
+QMAKE_TARGET_PRODUCT = "Porymap Studio"
+QMAKE_TARGET_DESCRIPTION = "Enhanced Gen 3 Pokemon map editor"
+QMAKE_TARGET_COPYRIGHT = "Porymap contributors and Porymap Studio contributors"
 
 # Get latest commit hash if we can (to display alongside version information).
 win32 {
@@ -155,6 +158,7 @@ SOURCES += src/core/advancemapparser.cpp \
     src/mainwindow.cpp \
     src/project.cpp \
     src/settings.cpp \
+    src/studio/productinfo.cpp \
     src/log.cpp \
     src/ui/uintspinbox.cpp \
     src/ui/updatepromoter.cpp \
@@ -277,6 +281,7 @@ HEADERS  += include/core/advancemapparser.h \
     include/scripting.h \
     include/scriptutility.h \
     include/settings.h \
+    include/studio/productinfo.h \
     include/log.h \
     include/ui/uintspinbox.h \
     include/ui/updatepromoter.h \

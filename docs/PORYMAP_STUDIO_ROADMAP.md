@@ -1,0 +1,99 @@
+# Porymap Studio Roadmap
+
+This roadmap is intentionally high level. Each milestone should be delivered as
+a small, buildable change that preserves existing Porymap behavior and remains
+compatible with future upstream merges.
+
+## Milestone 0 — Foundation and fork setup
+
+**Status:** Foundation prepared.
+
+- Establish visible Porymap Studio identity and preserve Porymap attribution.
+- Document architecture and compatibility boundaries.
+- Create the Studio extension boundary.
+- Verify native Replit builds and prepare build-only Windows CI.
+- Document metatile-rendering and Porytiles integration paths.
+
+## Milestone 1 — New Map From Image UI
+
+- Add a File menu entry and Qt dialog.
+- Reuse existing map, layout, and tileset selectors.
+- Load PNG files, preview them, report dimensions, and validate grid alignment.
+- Keep image analysis outside the dialog.
+- Do not create or modify a map yet.
+
+## Milestone 2 — Metatile rendering service
+
+- Extract deterministic, UI-independent rendering from existing image-provider
+  and tileset APIs.
+- Render every valid primary/secondary metatile with explicit layer and palette
+  settings.
+- Add focused tests for IDs, dimensions, layer order, and invalid assets.
+
+## Milestone 3 — Exact image-to-metatile matching
+
+- Split source artwork into metatile-sized cells.
+- Match exact pixels against rendered metatiles.
+- Return IDs and unmatched-cell diagnostics without changing a layout.
+
+## Milestone 4 — Fuzzy matching and confidence
+
+- Add measurable color/pixel distance.
+- Return ranked candidates and confidence scores.
+- Keep thresholds visible and deterministic.
+
+## Milestone 5 — Import preview and correction
+
+- Preview proposed layout results.
+- Highlight uncertain and unmatched cells.
+- Let users choose alternatives before committing.
+
+## Milestone 6 — Generate Porymap layouts
+
+- Convert an approved result into normal `Layout`/`Blockdata` edits.
+- Use existing undo, dirty-state, validation, and save paths.
+- Never write a parallel map format.
+
+## Milestone 7 — Porytiles integration
+
+- Invoke a pinned, user-configured Porytiles executable as a subprocess.
+- Stage inputs and outputs safely.
+- Preview changes before refreshing Porymap tilesets.
+
+## Milestone 8 — Generate tilesets from complete artwork
+
+- Convert source artwork into decompiled Porytiles-format assets.
+- Compile and validate generated Porymap-format tileset output.
+- Surface palette and tile-allocation failures clearly.
+
+## Milestone 9 — Smart collision assistance
+
+- Suggest collision/elevation values from imported terrain.
+- Require preview and confirmation.
+- Commit through normal undoable layout edits.
+
+## Milestone 10 — Terrain and autotile brushes
+
+- Define reusable terrain rules.
+- Paint connected terrain while preserving manual control.
+- Keep generic behavior separate from expansion-specific rules.
+
+## Milestone 11 — Build and test ROM integration
+
+- Add configurable project build/test commands.
+- Stream output, support cancellation, and report actionable errors.
+- Do not assume one decompilation-project layout.
+
+## Milestone 12 — Optional AI-assisted tools
+
+- Keep AI features optional and isolated.
+- Never send project assets without explicit user action.
+- Prefer deterministic editor tools whenever they solve the same problem.
+
+## Ongoing compatibility requirements
+
+- Preserve `pokeruby`, `pokeemerald`, and `pokefirered` support where practical.
+- Treat `pokeemerald-expansion` as the primary future target without changing
+  generic Porymap behavior.
+- Do not rewrite the app, change Gen 3 formats, remove existing features, or
+  introduce ROM-engine changes as editor features.

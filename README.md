@@ -1,36 +1,57 @@
-# Porymap
+# Porymap Studio
 
-[![Actions Status](https://github.com/huderlem/porymap/workflows/Build%20Porymap/badge.svg)](https://github.com/huderlem/porymap/actions)
+[![Porymap Studio CI](https://github.com/zenzero82/Porymap-Zen-Fork/actions/workflows/build.yml/badge.svg)](https://github.com/zenzero82/Porymap-Zen-Fork/actions/workflows/build.yml)
 
-A map editor for the Pokémon generation 3 decompilation projects ([pokeruby][pokeruby], [pokeemerald][pokeemerald], and [pokefirered][pokefirered]).
+Porymap Studio is an enhanced native C++/Qt map editor for Pokémon Generation 3
+decompilation projects. It is focused on faster map creation, automated
+workflows, and long-term support for [pokeemerald-expansion][pokeemerald-expansion]
+while retaining compatibility with [pokeemerald][pokeemerald],
+[pokefirered][pokefirered], and [pokeruby][pokeruby] wherever practical.
 
-To get started, view the full online guide here: https://huderlem.github.io/porymap/
+## Project status
 
-View the [Changelog][changelog] to see what's new.
+The Studio development foundation is in place. Existing Porymap editing
+behavior is preserved; image-to-map reconstruction, Porytiles integration,
+automatic tileset generation, collision assistance, and ROM build automation
+remain future milestones.
 
-## Download
+See:
 
-Windows and macOS users can download Porymap below to start using it immediately. Older versions of Porymap may be downloaded from the [Releases][releases] page.
+- [Architecture guide](docs/PORYMAP_STUDIO_ARCHITECTURE.md)
+- [Development roadmap](docs/PORYMAP_STUDIO_ROADMAP.md)
+- [Metatile and Porytiles technical notes](docs/PORYMAP_STUDIO_TECHNICAL_NOTES.md)
+- [Build instructions](INSTALL.md)
 
- - [Download Porymap for Windows](https://github.com/huderlem/porymap/releases/latest/download/porymap-windows.zip).
- - [Download Porymap for macOS latest (arm)](https://github.com/huderlem/porymap/releases/latest/download/porymap-macos-latest.zip).
- - [Download Porymap for macOS 15 (intel)](https://github.com/huderlem/porymap/releases/latest/download/porymap-macos-15-intel.zip).
+## Upstream Porymap
 
-Linux users must compile Porymap from source.
+Porymap Studio is a fork of [Porymap][porymap], created by huderlem and its
+contributors. Porymap provides the editor architecture, project compatibility,
+rendering, and file-format support on which Studio is built.
 
-<details>
-    <summary><i>Pre-compiled builds for Linux...</i></summary>
+Core internal names and the `porymap` executable name are intentionally retained
+to reduce merge conflicts with upstream. License and attribution files from
+Porymap remain authoritative and must be preserved.
 
->   If you are a Linux user and you do not want to compile Porymap from source, you may find Porymap on an external package repository like Flathub or AUR.
->   Builds installed through an external package manager are not explicitly maintained by Porymap and may be out of date.
-</details>
+The [upstream Porymap manual][porymap-manual] remains the reference for existing
+editor features.
 
-Read [INSTALL.md](INSTALL.md) for instructions on how to compile Porymap from source.
+## Development
 
-![Porymap Preview](docsrc/manual/images/introduction/porymap-loaded-project.png)
+Porymap Studio uses C++17, Qt, qmake, and GNU Make. On Replit:
 
+```bash
+./scripts/replit-build.sh
+./scripts/replit-run.sh
+```
+
+The first command performs a native build. The second builds incrementally and
+launches the desktop app in the Replit VNC preview.
+
+![Porymap editor preview](docsrc/manual/images/introduction/porymap-loaded-project.png)
+
+[porymap]: https://github.com/huderlem/porymap
+[porymap-manual]: https://huderlem.github.io/porymap/
 [pokeruby]: https://github.com/pret/pokeruby
 [pokeemerald]: https://github.com/pret/pokeemerald
 [pokefirered]: https://github.com/pret/pokefirered
-[changelog]: https://github.com/huderlem/porymap/blob/master/CHANGELOG.md
-[releases]: https://github.com/huderlem/porymap/releases
+[pokeemerald-expansion]: https://github.com/rh-hideout/pokeemerald-expansion

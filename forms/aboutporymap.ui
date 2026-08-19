@@ -7,17 +7,17 @@
     <x>0</x>
     <y>0</y>
     <width>388</width>
-    <height>121</height>
+     <height>168</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>About Porymap</string>
+   <string>About Porymap Studio</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
     <widget class="QLabel" name="label_Title">
      <property name="text">
-      <string>Porymap</string>
+       <string>Porymap Studio</string>
      </property>
      <property name="textFormat">
       <enum>Qt::TextFormat::RichText</enum>
@@ -46,7 +46,7 @@
    <item>
     <widget class="QLabel" name="label_Description">
      <property name="text">
-      <string>Map editor for pokeemerald, pokefirered and pokeruby.</string>
+       <string>Enhanced Gen 3 map editor for faster map creation and automated workflows.</string>
      </property>
      <property name="alignment">
       <set>Qt::AlignmentFlag::AlignCenter</set>
@@ -54,9 +54,22 @@
     </widget>
    </item>
    <item>
+    <widget class="QLabel" name="label_Attribution">
+     <property name="text">
+      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Based on &lt;a href=&quot;https://github.com/huderlem/porymap&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#0069d9;&quot;&gt;Porymap&lt;/span&gt;&lt;/a&gt; by huderlem and contributors.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+     </property>
+     <property name="alignment">
+      <set>Qt::AlignmentFlag::AlignCenter</set>
+     </property>
+     <property name="openExternalLinks">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
     <widget class="QLabel" name="label_Manual">
      <property name="text">
-      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Official Documentation: &lt;a href=&quot;https://huderlem.github.io/porymap/&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#0069d9;&quot;&gt;https://huderlem.github.io/porymap/&lt;/span&gt;&lt;/a&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+       <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Upstream Porymap documentation: &lt;a href=&quot;https://huderlem.github.io/porymap/&quot;&gt;&lt;span style=&quot; text-decoration: underline; color:#0069d9;&quot;&gt;huderlem.github.io/porymap&lt;/span&gt;&lt;/a&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
      </property>
      <property name="alignment">
       <set>Qt::AlignmentFlag::AlignCenter</set>

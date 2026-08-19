@@ -1,0 +1,64 @@
+name: Porymap Studio CI
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  linux-build:
+    name: Linux build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.*'
+          modules: 'qtcharts'
+          cache: true
+
+      - name: Configure
+        run: qmake -config release porymap.pro
+
+      - name: Compile
+        run: make -j2
+
+  windows-build:
+    name: Windows build
+    runs-on: windows-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Qt and MinGW
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.*'
+          host: windows
+          target: desktop
+          arch: win64_mingw
+          modules: 'qtcharts'
+          cache: true
+
+      - name: Configure
+        shell: pwsh
+        run: qmake -config release porymap.pro
+
+      - name: Compile
+        shell: pwsh
+        run: mingw32-make -j2
+
+      - name: Upload test artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: porymap-studio-windows-${{ github.sha }}
+          path: release/porymap.exe
+          if-no-files-found: error

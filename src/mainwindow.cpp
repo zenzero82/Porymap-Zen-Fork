@@ -29,6 +29,7 @@
 #include "newmapgroupdialog.h"
 #include "newlocationdialog.h"
 #include "loadingscreen.h"
+#include "studio/productinfo.h"
 
 #include <QClipboard>
 #include <QDirIterator>
@@ -68,14 +69,17 @@ MainWindow::MainWindow(QWidget *parent) :
     QCoreApplication::setOrganizationName("pret");
     QCoreApplication::setApplicationName("porymap");
     QCoreApplication::setApplicationVersion(PORYMAP_VERSION);
-    QApplication::setApplicationDisplayName(QApplication::applicationName());
+    QApplication::setApplicationDisplayName(Studio::ProductInfo::displayName());
     QApplication::setWindowIcon(QIcon(":/icons/porymap-icon-2.ico"));
     connect(qApp, &QApplication::applicationStateChanged, this, &MainWindow::showFileWatcherWarning);
 
     ui->setupUi(this);
 
     logInit();
-    logInfo(QString("Launching Porymap v%1 (%2)").arg(QCoreApplication::applicationVersion()).arg(QStringLiteral(PORYMAP_LATEST_COMMIT)));
+    logInfo(QString("Launching %1 v%2 (%3)")
+                .arg(Studio::ProductInfo::displayName())
+                .arg(QCoreApplication::applicationVersion())
+                .arg(QStringLiteral(PORYMAP_LATEST_COMMIT)));
     logInfo(QString("Using Qt v%2 (%3)").arg(QStringLiteral(QT_VERSION_STR)).arg(QSysInfo::buildCpuArchitecture()));
 }
 
@@ -624,28 +628,31 @@ void MainWindow::initMapList() {
 }
 
 void MainWindow::updateWindowTitle() {
+    const QString applicationName = QApplication::applicationDisplayName();
     if (!editor || !editor->project) {
-        setWindowTitle(QCoreApplication::applicationName());
+        setWindowTitle(applicationName);
         return;
     }
 
     const QString projectName = editor->project->getProjectTitle();
     if (!editor->layout) {
-        setWindowTitle(projectName);
+        setWindowTitle(QString("%1 - %2").arg(projectName, applicationName));
         return;
     }
 
     if (editor->map) {
-        setWindowTitle(QString("%1%2 - %3")
+        setWindowTitle(QString("%1%2 - %3 - %4")
             .arg(editor->map->hasUnsavedChanges() ? "* " : "")
             .arg(editor->map->name())
             .arg(projectName)
+            .arg(applicationName)
         );
     } else {
-        setWindowTitle(QString("%1%2 - %3")
+        setWindowTitle(QString("%1%2 - %3 - %4")
             .arg(editor->layout->hasUnsavedChanges() ? "* " : "")
             .arg(editor->layout->name)
             .arg(projectName)
+            .arg(applicationName)
         );
     }
 

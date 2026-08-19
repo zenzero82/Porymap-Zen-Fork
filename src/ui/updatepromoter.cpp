@@ -139,7 +139,7 @@ void UpdatePromoter::processWebpage(const QJsonDocument &data, const QUrl &nextU
     this->button_Downloads->setEnabled(!this->downloadUrl.isEmpty());
     this->button_Retry->setEnabled(true);
     if (!this->newVersion.isNull()) {
-        ui->label_Status->setText("A new version of Porymap is available!");
+        ui->label_Status->setText("A new upstream Porymap release is available!");
         ui->label_Warning->setVisible(this->newVersion.majorVersion() > porymapVersion.majorVersion());
 
         // Alert the user about the new version if the dialog wasn't already open.
@@ -151,7 +151,7 @@ void UpdatePromoter::processWebpage(const QJsonDocument &data, const QUrl &nextU
         }
         porymapConfig.lastUpdateCheckVersion = this->newVersion;
     } else {
-        ui->label_Status->setText("Your version of Porymap is up to date!");
+        ui->label_Status->setText("The Porymap base used by Porymap Studio is up to date!");
         ui->label_Warning->setVisible(false);
     }
 }

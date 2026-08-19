@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>porymap</string>
+   <string>Porymap Studio</string>
   </property>
   <widget class="QWidget" name="centralWidget">
    <layout class="QGridLayout" name="gridLayout_15">
@@ -3072,7 +3072,7 @@
   </action>
   <action name="actionAbout_Porymap">
    <property name="text">
-    <string>About Porymap...</string>
+    <string>About Porymap Studio...</string>
    </property>
   </action>
   <action name="actionPlayer_View_Rectangle">
@@ -3174,7 +3174,7 @@
   </action>
   <action name="actionCheck_for_Updates">
    <property name="text">
-    <string>Check for Updates...</string>
+    <string>Check for Upstream Updates...</string>
    </property>
    <property name="menuRole">
     <enum>QAction::MenuRole::ApplicationSpecificRole</enum>
@@ -3265,7 +3265,7 @@
   </action>
   <action name="actionOpen_Manual">
    <property name="text">
-    <string>Open Manual</string>
+    <string>Open Porymap Manual</string>
    </property>
   </action>
  </widget>

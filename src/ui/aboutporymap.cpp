@@ -1,5 +1,6 @@
 #include "aboutporymap.h"
 #include "ui_aboutporymap.h"
+#include "studio/productinfo.h"
 
 AboutPorymap::AboutPorymap(QWidget *parent) :
     QDialog(parent),
@@ -7,6 +8,9 @@ AboutPorymap::AboutPorymap(QWidget *parent) :
 {
     ui->setupUi(this);
     setAttribute(Qt::WA_DeleteOnClose);
+    setWindowTitle(tr("About %1").arg(Studio::ProductInfo::displayName()));
+    ui->label_Title->setText(Studio::ProductInfo::displayName());
+    ui->label_Description->setText(Studio::ProductInfo::description());
 
     // Set font in the stylesheet as opposed to the form so that it won't be overwritten by custom user fonts.
     setStyleSheet("QLabel { font-family: \"Arial\"; }"

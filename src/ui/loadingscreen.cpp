@@ -2,6 +2,7 @@
 #include "aboutporymap.h"
 #include "ui_loadingscreen.h"
 #include "qgifimage.h"
+#include "studio/productinfo.h"
 
 #include <QApplication>
 
@@ -16,6 +17,7 @@ PorymapLoadingScreen::~PorymapLoadingScreen() {
 PorymapLoadingScreen::PorymapLoadingScreen(QWidget *parent) : QWidget(parent), ui(new Ui::LoadingScreen) {
     ui->setupUi(this);
     this->setWindowFlags(Qt::FramelessWindowHint);
+    this->ui->labelPorymap->setText(Studio::ProductInfo::displayName());
 
     this->splashImage.load(":/images/porysplash.gif");
 
