@@ -1,3 +1,4 @@
 - [Qt qmake on Replit](replit-qt-qmake.md) — Qt modules use split Nix outputs; build through the path-discovering helper instead of bare qmake.
+- [Windows Qt CI toolchain](windows-qt-ci-toolchain.md) — Qt MinGW builds must use the matching Qt-provided compiler, not the GitHub runner default.
 - [GitHub REST history reconciliation](github-rest-history-reconciliation.md) — repos populated through API commits need explicit local-history reconciliation before normal Git sync.
 - [Replit build validation isolation](replit-build-validation-isolation.md) — keep native build validation detached from desktop Run to avoid concurrent compiles.
