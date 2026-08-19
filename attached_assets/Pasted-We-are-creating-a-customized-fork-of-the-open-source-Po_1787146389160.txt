@@ -1,0 +1,582 @@
+We are creating a customized fork of the open-source Porymap project.
+
+Original repository:
+https://github.com/huderlem/porymap
+
+The new project will be called:
+
+Porymap Studio
+
+Porymap Studio will remain a native C++/Qt desktop application and should stay compatible with Pokémon Gen 3 decompilation projects, especially pokeemerald-expansion.
+
+The purpose of this fork is to dramatically simplify map creation and reduce the amount of repetitive manual work required when building large Pokémon ROM hacks.
+
+Eventually, Porymap Studio should combine ideas and functionality from:
+
+* Porymap
+* Porytiles
+* Image-to-map reconstruction
+* Smart terrain painting
+* Automatic tileset generation
+* Collision assistance
+* Build-and-test automation
+
+However, DO NOT attempt to build all of those features yet.
+
+The goal of this task is to create a clean, stable foundation for the fork so future development can happen incrementally.
+
+Phase 0 — Repository and Architecture Review
+
+Before changing any source code, inspect the entire Porymap repository.
+
+Identify and document:
+
+* Application entry point
+* Main window classes
+* File menu implementation
+* Existing New Map workflow
+* Map model/data structures
+* Map layout storage
+* Tileset loading
+* Metatile loading
+* Metatile rendering
+* Palette handling
+* Collision data handling
+* Event/warp handling
+* Project configuration
+* File IO
+* Qt UI structure
+* Build system
+* Supported operating systems
+* Existing automated tests, if any
+
+Also identify which components should be reused for the features we plan to build later.
+
+Do not unnecessarily redesign or rewrite existing Porymap architecture.
+
+We want this fork to remain maintainable and reasonably compatible with future upstream Porymap changes.
+
+⸻
+
+Phase 1 — Fork Identity
+
+Change the visible application identity from Porymap to:
+
+Porymap Studio
+
+Do this carefully.
+
+Update appropriate:
+
+* Window titles
+* About dialog
+* Application display name
+* Project metadata
+* Documentation references where appropriate
+
+Do NOT rename core internal classes, namespaces, source files, or existing Porymap structures unless absolutely necessary.
+
+Internally, preserve the original architecture as much as possible so upstream updates remain easier to merge.
+
+Add a short description somewhere appropriate:
+
+Porymap Studio is an enhanced Gen 3 Pokémon map editor focused on faster map creation, automated workflows, and pokeemerald-expansion development.
+
+Clearly preserve attribution and licensing information from the original Porymap project.
+
+⸻
+
+Phase 2 — Create a Modular Extension Architecture
+
+Create a location for Porymap Studio-specific functionality.
+
+Prefer something similar to:
+
+src/studio/
+src/studio/imageimport/
+src/studio/tilesets/
+src/studio/build/
+
+If the existing Porymap structure suggests a better organization, use the existing project’s conventions.
+
+The important requirement is:
+
+Do not scatter custom Porymap Studio logic throughout unrelated Porymap files.
+
+We want new functionality separated whenever practical.
+
+Create placeholder architecture for future systems.
+
+For example:
+
+src/studio/imageimport/
+    mapimageanalyzer.h
+    mapimageanalyzer.cpp
+src/studio/tilesets/
+    tilesetservice.h
+    tilesetservice.cpp
+src/studio/build/
+    projectbuildservice.h
+    projectbuildservice.cpp
+
+These do not need full implementations yet.
+
+Do NOT create unnecessary abstraction layers.
+
+Only create enough structure so future development has clear locations.
+
+⸻
+
+Phase 3 — Add “New Map From Image”
+
+Add a new option to the File menu near the existing New Map action:
+
+New Map From Image…
+
+This will become one of the primary Porymap Studio features.
+
+For this task, create the UI and image-analysis foundation only.
+
+Do NOT attempt actual metatile reconstruction yet.
+
+Create a Qt dialog named something similar to:
+
+NewMapFromImageDialog
+
+Follow the naming/style conventions already used by Porymap.
+
+The dialog should contain:
+
+Map Information
+
+* Map Name
+* Primary Tileset
+* Secondary Tileset
+
+Reuse existing Porymap widgets/data sources for tileset selection where possible.
+
+Image
+
+* Image File
+* Browse button
+* Image preview
+
+Initially support:
+
+* PNG
+
+Design the architecture so other image formats could be added later.
+
+Dimensions
+
+Show:
+
+* Source image width
+* Source image height
+* Proposed map width
+* Proposed map height
+
+Include:
+
+Automatically detect map dimensions
+
+When enabled, calculate map dimensions based on the image and the size of the metatile grid used by Porymap.
+
+Do not hardcode assumptions if Porymap already exposes the necessary constants.
+
+Validate that the image dimensions can be cleanly divided into map cells.
+
+If they cannot, show a useful warning explaining the problem.
+
+Example:
+
+Image dimensions do not align with the current metatile grid.
+
+Do not crash or silently crop the image.
+
+⸻
+
+Phase 4 — MapImageAnalyzer
+
+Create:
+
+MapImageAnalyzer
+
+This class/service should live outside the Qt dialog.
+
+The UI should not contain the actual image-processing logic.
+
+MapImageAnalyzer should initially support:
+
+* Loading an image
+* Verifying the image exists
+* Verifying the image can be decoded
+* Reading pixel dimensions
+* Determining proposed map dimensions
+* Validating grid alignment
+* Returning useful validation errors
+* Providing the loaded image for preview/future processing
+
+Design it so we can later extend it with:
+
+MetatileMatcher
+MetatileRenderer
+ImageImportResult
+ImportConfidence
+UnknownTile
+TilesetGenerator
+CollisionAnalyzer
+
+Do NOT implement those systems yet.
+
+⸻
+
+Phase 5 — Image Preview
+
+When an image is loaded in New Map From Image:
+
+Display a preview.
+
+The preview should:
+
+* Preserve aspect ratio
+* Scale to available UI space
+* Not distort the source artwork
+* Work with large map images
+* Avoid locking up the interface
+
+Show basic information beneath or beside the preview.
+
+Example:
+
+Source Image
+768 × 640 px
+Detected Map
+48 × 40 cells
+Status
+Ready for import
+
+If invalid:
+
+Status
+Image does not align with map grid
+
+⸻
+
+Phase 6 — Import Placeholder
+
+The dialog should have:
+
+* Import
+* Cancel
+
+For now, the Import button should NOT create or modify a map.
+
+If the image and configuration are valid, show a message such as:
+
+Image analysis successful. Map reconstruction will be added in the next development phase.
+
+This lets us verify the entire UI and image-analysis workflow before implementing the actual reconstruction engine.
+
+The Import button should be disabled when validation fails.
+
+⸻
+
+Phase 7 — Prepare for Future Metatile Matching
+
+Inspect how Porymap currently renders metatiles.
+
+Document how we could later programmatically render every available metatile into an image.
+
+Do NOT implement the matcher yet.
+
+Our next development phase will likely work like this:
+
+Full map PNG
+        ↓
+Split image into map cells
+        ↓
+Render all available metatiles
+        ↓
+Compare each image cell to each metatile
+        ↓
+Select best match
+        ↓
+Generate Porymap layout
+
+Identify:
+
+* Which existing Porymap renderer should be reused
+* How primary and secondary tilesets are represented
+* How metatile IDs are stored
+* How a normal map layout is created
+
+Leave clear developer notes in an appropriate documentation file.
+
+⸻
+
+Phase 8 — Prepare for Porytiles Integration
+
+We eventually want Porytiles functionality accessible directly inside Porymap Studio.
+
+Porytiles repository:
+
+https://github.com/grunt-lucas/porytiles
+
+Do NOT copy or integrate Porytiles yet.
+
+For now:
+
+1. Inspect how Porytiles is normally invoked.
+2. Identify its inputs.
+3. Identify its outputs.
+4. Identify how those outputs correspond to assets Porymap already loads.
+5. Document possible integration strategies.
+
+Potential future architecture:
+
+Porymap Studio
+       ↓
+Tileset Studio
+       ↓
+Porytiles Service
+       ↓
+Compile artwork
+       ↓
+Refresh Porymap tileset
+
+Create a short architecture document explaining whether it would be better to:
+
+* bundle the Porytiles executable
+* invoke it as a subprocess
+* link its code as a library
+* or use another integration method
+
+Do NOT make the final integration yet.
+
+Favor an approach that minimizes modifications to Porymap and Porytiles themselves.
+
+⸻
+
+Phase 9 — Build and Development Workflow
+
+Attempt to build Porymap Studio inside the Replit environment.
+
+Do not assume the environment already contains everything needed.
+
+Inspect the existing project documentation for required:
+
+* Qt version
+* compiler
+* CMake/qmake tooling
+* dependencies
+
+Install/configure dependencies where Replit allows it.
+
+If the full graphical desktop application cannot run interactively in Replit, that is acceptable.
+
+The important goals are:
+
+* Source code can be compiled where possible
+* Compiler errors from our changes are identified
+* The codebase remains suitable for Windows builds later
+
+Do not redesign Porymap into a web application just because Replit is browser-based.
+
+Porymap Studio must remain a native Qt desktop application.
+
+⸻
+
+Phase 10 — Windows Build Preparation
+
+Create or prepare a GitHub Actions workflow for eventually building Porymap Studio on Windows.
+
+If an appropriate workflow already exists, reuse or extend it.
+
+Do not unnecessarily duplicate existing CI.
+
+The eventual goal is that GitHub can generate a Windows build artifact whenever we push changes.
+
+Do not publish an official release yet.
+
+The workflow should eventually allow us to:
+
+Replit
+   ↓
+GitHub
+   ↓
+GitHub Actions
+   ↓
+Windows Porymap Studio build
+   ↓
+Test on PC
+
+⸻
+
+Phase 11 — Documentation
+
+Create a development roadmap document such as:
+
+docs/PORYMAP_STUDIO_ROADMAP.md
+
+Include:
+
+Milestone 0
+
+Foundation and fork setup
+
+Milestone 1
+
+New Map From Image UI
+
+Milestone 2
+
+Metatile rendering service
+
+Milestone 3
+
+Exact image-to-metatile matching
+
+Milestone 4
+
+Fuzzy matching and confidence scores
+
+Milestone 5
+
+Import preview and manual mismatch correction
+
+Milestone 6
+
+Automatically generate Porymap layouts
+
+Milestone 7
+
+Porytiles integration
+
+Milestone 8
+
+Create tilesets from complete map artwork
+
+Milestone 9
+
+Smart collision assistance
+
+Milestone 10
+
+Terrain/autotile brushes
+
+Milestone 11
+
+Build & Test ROM integration
+
+Milestone 12
+
+Optional AI-assisted map tools
+
+Keep this roadmap high level.
+
+⸻
+
+Important Development Rules
+
+Do NOT rewrite Porymap from scratch.
+
+Do NOT convert Porymap to a web application.
+
+Do NOT modify the Gen 3 map format.
+
+Do NOT add ROM-engine modifications.
+
+Do NOT implement every planned feature in this task.
+
+Do NOT introduce unnecessary dependencies.
+
+Do NOT remove existing Porymap functionality.
+
+Do NOT make large unrelated refactors.
+
+Prefer small, modular additions.
+
+Reuse existing Porymap architecture wherever practical.
+
+Preserve the original project’s license and attribution.
+
+Keep our fork suitable for pulling future upstream Porymap changes.
+
+⸻
+
+Compatibility Priority
+
+Our primary target will eventually be:
+
+pokeemerald-expansion
+
+However, avoid unnecessarily breaking compatibility with:
+
+* pokeemerald
+* pokefirered
+* pokeruby
+
+If a future Porymap Studio feature requires expansion-specific behavior, isolate it rather than changing generic Porymap behavior.
+
+⸻
+
+Final Deliverable
+
+When finished, provide a detailed development report containing:
+
+Repository Analysis
+
+Explain the major Porymap architecture components you found.
+
+Added Files
+
+List every file created.
+
+Modified Files
+
+List every existing file modified.
+
+New Functionality
+
+Explain what now works.
+
+Build Results
+
+Report:
+
+* Build command
+* Compiler
+* Qt version
+* Successful/failed
+* Any warnings
+* Any limitations caused by Replit
+
+New Map From Image
+
+Confirm whether I can:
+
+1. Open the dialog.
+2. Select a PNG.
+3. Preview the PNG.
+4. See image dimensions.
+5. See proposed map dimensions.
+6. See validation results.
+
+Porytiles Research
+
+Explain the recommended future integration approach.
+
+Windows Testing
+
+Clearly identify anything that must be tested later on Windows.
+
+Next Recommended Task
+
+Do NOT automatically begin Phase 2.
+
+Instead recommend the next task for implementing:
+
+Metatile Rendering + Exact Image Matching
+
+The finished code should leave the repository in a clean state that I can upload/push to GitHub and continue development later using Codex on my PC.
