@@ -54,7 +54,19 @@ jobs:
 
       - name: Compile
         shell: pwsh
-        run: mingw32-make -j2
+        run: |
+          mingw32-make -j2 2>&1 | Tee-Object -FilePath windows-build.log
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+      - name: Upload Windows build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: porymap-studio-windows-build-log-${{ github.sha }}
+          path: windows-build.log
+          if-no-files-found: warn
 
       - name: Upload test artifact
         uses: actions/upload-artifact@v4
