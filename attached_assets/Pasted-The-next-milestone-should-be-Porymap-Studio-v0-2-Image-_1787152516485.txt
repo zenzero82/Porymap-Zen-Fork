@@ -1,0 +1,110 @@
+The next milestone should be:
+
+Porymap Studio v0.2 — Image Import + Deterministic Metatile Rendering
+
+That means we now implement two pieces that everything else depends on:
+
+New Map From Image
+File → New Map From Image…
+Select PNG
+Preview it
+Detect dimensions
+Choose primary/secondary tilesets
+Validate against the map grid
+Metatile Rendering Service
+Take every metatile available from the selected primary/secondary tilesets
+Render it to a deterministic image in memory
+Associate that rendered image with its metatile ID
+Give the future matcher a library like:
+0x000 → image
+0x001 → image
+0x002 → image
+...
+0x1A5 → image
+
+Once those two things exist, Phase 3 becomes the exciting part:
+
+Your full map image
+        ↓
+Slice into cells
+        ↓
+Compare each cell against rendered metatiles
+        ↓
+Exact match
+        ↓
+Metatile IDs
+        ↓
+Automatically generate map
+
+For an image like the one you sent earlier, this is the point where Porymap Studio starts becoming capable of reconstructing it instead of simply previewing it.
+
+I would also change one thing from our earlier roadmap: combine the image-import UI and deterministic metatile renderer into the next task. Replit previously archived them separately, but they're closely related enough that having both in place gives Codex/Replit a much cleaner target for the matching engine.
+
+And importantly, we should not touch Porytiles yet. First prove:
+
+Existing tileset + full map PNG → map reconstruction.
+
+Once that's working reliably, Porytiles becomes the fallback for pixels that don't exist in the selected tilesets:
+
+Pixel artwork
+    ↓
+Can existing tilesets reproduce it?
+    ↓
+ YES                         NO
+  ↓                           ↓
+Match metatiles          Porytiles
+  ↓                           ↓
+Generate layout          Generate tiles
+                              ↓
+                         Generate metatiles
+                              ↓
+                         Generate layout
+
+That separation will make debugging dramatically easier.
+
+What I want Replit to establish next
+
+By the end of the next task, we should be able to open Porymap Studio and do:
+
+File → New Map From Image → choose that village PNG → select tilesets → Analyze
+
+and get something similar to:
+
+Image Analysis
+
+
+Source:
+896 × 608 px
+
+
+Map Grid:
+56 × 38
+
+
+Primary Tileset:
+gTileset_General
+
+
+Secondary Tileset:
+AgateVillage
+
+
+Available Metatiles:
+824
+
+
+Rendered Metatiles:
+824
+
+
+Image Alignment:
+✓ Valid
+
+
+Ready for matching.
+
+It does not need to build the map yet.
+
+That "Ready for matching" state is exactly where I want the code before we implement the reconstruction algorithm.
+
+After that, the next feature becomes surprisingly focused: take one image cell and determine which rendered metatile matches it. Once one works, scale it to the whole map.
