@@ -29,6 +29,8 @@
 #include "newmapgroupdialog.h"
 #include "newlocationdialog.h"
 #include "loadingscreen.h"
+#include "maplayout.h"
+#include "studio/newmapfromimagedialog.h"
 #include "studio/productinfo.h"
 
 #include <QClipboard>
@@ -388,6 +390,7 @@ void MainWindow::initExtraSignals() {
     label_MapRulerStatus->setTextInteractionFlags(Qt::TextSelectableByMouse);
 
     connect(ui->action_NewMap, &QAction::triggered, this, &MainWindow::openNewMapDialog);
+    connect(ui->action_NewMapFromImage, &QAction::triggered, this, &MainWindow::openNewMapFromImageDialog);
     connect(ui->action_NewLayout, &QAction::triggered, this, &MainWindow::openNewLayoutDialog);
     connect(ui->comboBox_LayoutSelector, &NoScrollComboBox::editingFinished, this, &MainWindow::onLayoutSelectorEditingFinished);
     connect(ui->checkBox_smartPaths, &QCheckBox::toggled, this, &MainWindow::setSmartPathsEnabled);
@@ -1799,6 +1802,26 @@ void MainWindow::openNewLocationDialog() {
 
 void MainWindow::openNewMapDialog() {
     auto dialog = new NewMapDialog(this->editor->project, this);
+    dialog->open();
+}
+
+void MainWindow::openNewMapFromImageDialog() {
+    if (!this->editor->project) {
+        return;
+    }
+
+    Studio::MetatileRenderService::RenderContext renderContext;
+    if (this->editor->layout) {
+        renderContext.layerOrder = this->editor->layout->metatileLayerOrder();
+        renderContext.layerOpacity = this->editor->layout->metatileLayerOpacity();
+        renderContext.description = QString("Active layout: %1").arg(this->editor->layout->name);
+    } else {
+        renderContext.layerOrder = Layout::globalMetatileLayerOrder();
+        renderContext.layerOpacity = Layout::globalMetatileLayerOpacity();
+        renderContext.description = QStringLiteral("Global/default layer settings");
+    }
+
+    auto dialog = new Studio::NewMapFromImageDialog(this->editor->project, renderContext, this);
     dialog->open();
 }
 

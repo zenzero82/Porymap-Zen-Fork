@@ -4,10 +4,12 @@ Porymap Studio-specific code belongs under `src/studio/` with public headers und
 `include/studio/`. Existing Porymap models, rendering, project I/O, and widgets
 remain the source of truth.
 
-Planned feature areas:
+Current and planned feature areas:
 
-- `imageimport/` — image validation, analysis, matching, and import orchestration.
-- `tilesets/` — metatile rendering and future Porytiles process integration.
+- `MapImageAnalyzer` — Phase 1 PNG validation and map-grid analysis only.
+- `MetatileRenderService` — Phase 1 deterministic metatile rendering only.
+- Future `imageimport/` — matching and import orchestration.
+- Future `tilesets/` — Porytiles process integration.
 - `build/` — project build/test process orchestration.
 
 Create these subdirectories only when their first real implementation is added.
@@ -21,3 +23,7 @@ Studio modules should:
 3. expose explicit results and errors rather than mutating global state silently;
 4. isolate expansion-specific behavior behind compatibility checks; and
 5. preserve the Gen 3 project formats already handled by Porymap.
+
+The Phase 1 dialog intentionally stops at **READY FOR MATCHING**. It must not
+create maps or layouts, write image data into a project, run matching, or
+modify tilesets/collision data.

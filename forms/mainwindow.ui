@@ -2854,6 +2854,7 @@
     <addaction name="action_Save_Project"/>
     <addaction name="separator"/>
     <addaction name="action_NewMap"/>
+    <addaction name="action_NewMapFromImage"/>
     <addaction name="action_NewLayout"/>
     <addaction name="actionNew_Tileset"/>
     <addaction name="actionDuplicate_Current_Map"/>
@@ -2977,6 +2978,11 @@
    </property>
    <property name="shortcut">
     <string>Ctrl+N</string>
+   </property>
+  </action>
+  <action name="action_NewMapFromImage">
+   <property name="text">
+    <string>New Map From Image...</string>
    </property>
   </action>
   <action name="action_Export_Map_Image">

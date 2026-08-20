@@ -41,6 +41,44 @@ The current exporter temporarily changes render-related project settings. A
 pure Studio renderer should make those settings explicit inputs before matching
 work begins.
 
+### Phase 1 image analysis boundary
+
+`Studio::MapImageAnalyzer` decodes a selected PNG without scaling or otherwise
+changing its decoded pixel data. It reports the exact source dimensions, then
+validates that both dimensions align to `Metatile::pixelSize()`. In the current
+Porymap renderer this resolves to **16 × 16 pixels**, but Studio deliberately
+reads the value from `Metatile` rather than hard-coding it.
+
+`Studio::MetatileRenderService` renders each valid primary and secondary
+metatile through the existing `getMetatileImage()` path. That retains Porymap's
+palette selection, layer composition, flips, transparency, and primary/
+secondary ownership rules. It snapshots the active layout's layer order and
+opacity before the dialog opens; if no layout is active, it snapshots Porymap's
+global/default layer settings. Results are deterministic `QImage` values and
+are rendered afresh for every analysis because Porymap's editable tileset
+models do not expose reliable revision signals.
+
+Analysis is only READY when every available candidate rendered successfully.
+Manual map dimensions are accepted only when they exactly match the aligned,
+unchanged PNG dimensions.
+
+Phase 1 deliberately ends after the dialog reports **READY FOR MATCHING**.
+It does not create or edit a map, layout, tileset, collision data, or project
+file.
+
+#### Reproducible developer verification
+
+1. Build with `./scripts/replit-build.sh`.
+2. Open an existing project and choose **File → New Map From Image...**.
+3. Select any PNG whose width and height are divisible by the displayed
+   metatile size, select a primary and secondary tileset, and run analysis.
+4. Confirm the exact source dimensions, detected map dimensions, non-zero
+   rendered-metatile count, and **READY FOR MATCHING** status.
+5. In a debug build, use **Export Debug Metatiles...** and confirm deterministic
+   local names such as `primary_0000.png` and `secondary_0000.png`.
+6. Repeat with a PNG whose width or height is not divisible by the metatile
+   size and confirm that alignment fails before rendering or project changes.
+
 ### Matching pipeline boundary
 
 The next milestones should keep this flow independent from the dialog:

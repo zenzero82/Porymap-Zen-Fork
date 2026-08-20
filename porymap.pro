@@ -158,6 +158,9 @@ SOURCES += src/core/advancemapparser.cpp \
     src/mainwindow.cpp \
     src/project.cpp \
     src/settings.cpp \
+    src/studio/mapimageanalyzer.cpp \
+    src/studio/metatilerenderservice.cpp \
+    src/studio/newmapfromimagedialog.cpp \
     src/studio/productinfo.cpp \
     src/log.cpp \
     src/ui/uintspinbox.cpp \
@@ -282,6 +285,9 @@ HEADERS  += include/core/advancemapparser.h \
     include/scriptutility.h \
     include/settings.h \
     include/studio/productinfo.h \
+    include/studio/mapimageanalyzer.h \
+    include/studio/metatilerenderservice.h \
+    include/studio/newmapfromimagedialog.h \
     include/log.h \
     include/ui/uintspinbox.h \
     include/ui/updatepromoter.h \

@@ -217,6 +217,7 @@ private slots:
     void markLayoutEdited();
 
     void on_actionNew_Tileset_triggered();
+    void openNewMapFromImageDialog();
     void on_action_Save_triggered();
     void on_action_Exit_triggered();
     void onLayoutSelectorEditingFinished();

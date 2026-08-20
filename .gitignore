@@ -10,6 +10,8 @@ porymap.cfg
 porymap.log
 build/
 venv/
+.cache/
+.local/
 
 # Qt generated files
 .qmake.stash
