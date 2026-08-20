@@ -1,0 +1,564 @@
+# Porymap Studio — Phase 1: Image Import + Deterministic Metatile Rendering
+
+The Porymap Studio foundation is now complete.
+
+The repository currently has:
+
+* Working native C++17/Qt/qmake Porymap fork
+* Porymap Studio branding
+* Existing Porymap functionality preserved
+* Linux build verified
+* Windows build verified
+* Windows headless startup smoke test verified
+* GitHub Actions working
+* Studio-specific module boundary established
+* Architecture and technical documentation already written
+
+Do NOT repeat the foundation work.
+
+Do NOT spend this task on additional branding, CI, packaging, installers, or general architecture documentation.
+
+We are now beginning actual Porymap Studio feature development.
+
+# PRIMARY GOAL
+
+Implement the foundations required for:
+
+**Full Map Image → Metatile Matching → Automatically Generated Porymap Map**
+
+This task will implement the first two components:
+
+1. **New Map From Image**
+2. **Deterministic Metatile Rendering Service**
+
+Do NOT implement image-to-metatile matching yet.
+
+At the end of this task, Porymap Studio should be capable of:
+
+1. Loading a compatible Gen 3 project.
+2. Opening **File → New Map From Image…**
+3. Selecting a PNG.
+4. Previewing the image.
+5. Selecting primary and secondary tilesets.
+6. Determining the image/map dimensions.
+7. Validating the image against the expected metatile grid.
+8. Rendering every available metatile from the selected tilesets into deterministic in-memory images.
+9. Reporting that the image and selected tilesets are **Ready for Matching**.
+
+---
+
+# PART 1 — REVIEW EXISTING STUDIO DOCUMENTATION
+
+Before implementing anything, read the existing:
+
+* `docs/PORYMAP_STUDIO_ARCHITECTURE.md`
+* `docs/PORYMAP_STUDIO_TECHNICAL_NOTES.md`
+* `docs/PORYMAP_STUDIO_ROADMAP.md`
+* `src/studio/README.md`
+
+Use the architecture already documented.
+
+Do not redo a broad repository analysis unless implementation requires checking a specific component.
+
+Pay particular attention to the documented existing metatile rendering paths.
+
+We want to reuse Porymap's renderer and models wherever possible rather than creating a parallel rendering system.
+
+---
+
+# PART 2 — NEW MAP FROM IMAGE
+
+Add a new action to the File menu:
+
+**New Map From Image…**
+
+Place it logically near the existing New Map action.
+
+The existing New Map functionality must remain unchanged.
+
+Create a Studio-specific Qt dialog following existing Porymap UI conventions.
+
+Suggested name:
+
+`NewMapFromImageDialog`
+
+Use another name if existing naming conventions strongly suggest one.
+
+The dialog should contain the following.
+
+## Source Image
+
+* Image file path
+* Browse button
+* PNG support
+* Image preview
+* Source image width
+* Source image height
+
+The preview must:
+
+* Preserve aspect ratio
+* Never distort the artwork
+* Handle large map images
+* Scale appropriately when the dialog is resized
+
+Do not resample or modify the original image data used for analysis.
+
+The scaled preview should be separate from the source image.
+
+---
+
+# PART 3 — MAP CONFIGURATION
+
+Include:
+
+* Map Name
+* Primary Tileset
+* Secondary Tileset
+* Automatically Detect Dimensions
+* Map Width
+* Map Height
+
+Reuse Porymap's existing tileset/project models wherever possible.
+
+Do not maintain a second independent list of tilesets.
+
+The selected tilesets should correspond to the actual tilesets available in the currently loaded project.
+
+---
+
+# PART 4 — IMAGE ANALYSIS SERVICE
+
+Create a Studio-specific service/class such as:
+
+`MapImageAnalyzer`
+
+Place it within the existing Studio module architecture.
+
+The dialog should NOT contain the core image-analysis logic.
+
+MapImageAnalyzer should support:
+
+* Loading PNG
+* Verifying the file exists
+* Verifying Qt can decode it
+* Reading exact pixel dimensions
+* Retaining original image data
+* Determining proposed map dimensions
+* Validating alignment with the map/metatile grid
+* Returning useful validation results
+* Returning useful error messages
+
+Do not silently crop images.
+
+Do not silently resize images.
+
+Do not alter pixels during analysis.
+
+---
+
+# IMPORTANT: DETERMINE THE CORRECT CELL SIZE FROM PORYMAP
+
+Do not blindly assume that the imported image should be divided into 16×16 cells.
+
+Inspect Porymap's actual rendering and map layout architecture.
+
+Determine exactly what pixel dimensions correspond to one map-layout block/metatile as rendered in the final map.
+
+Use existing constants or model information where possible.
+
+Document the value and where it comes from.
+
+The future image matcher must compare source artwork against the exact same visual unit Porymap places into a map layout.
+
+---
+
+# PART 5 — DETERMINISTIC METATILE RENDERING SERVICE
+
+This is the most important backend component in this task.
+
+Create a Studio service such as:
+
+`MetatileRenderService`
+
+Its purpose is to generate a deterministic image representation for every metatile available from the selected primary and secondary tilesets.
+
+DO NOT duplicate Porymap's graphics logic if an existing rendering path can be reused.
+
+Reuse the same:
+
+* Tiles
+* Palettes
+* Metatile definitions
+* Layer information
+* Flip flags
+* Transparency behavior
+* Primary/secondary tileset behavior
+
+that Porymap itself uses when displaying a map.
+
+The goal is:
+
+Given:
+
+* project
+* primary tileset
+* secondary tileset
+* metatile ID
+
+Return:
+
+* deterministic image
+* metatile ID
+* source tileset information
+
+Conceptually:
+
+```text
+Metatile 0x000 → QImage
+Metatile 0x001 → QImage
+Metatile 0x002 → QImage
+...
+```
+
+The output images must be suitable for future pixel-level comparisons.
+
+---
+
+# PART 6 — PIXEL ACCURACY REQUIREMENTS
+
+This renderer is NOT intended primarily for UI thumbnails.
+
+It will become the reference library used by the image-matching engine.
+
+Therefore:
+
+* Do not apply smoothing.
+* Do not use lossy conversion.
+* Do not scale unless absolutely necessary.
+* Preserve exact RGB/RGBA output.
+* Use deterministic rendering.
+* Ensure the same metatile always produces identical pixel data given the same project assets.
+* Respect transparency exactly as Porymap does.
+
+If Porymap's existing renderer produces a composited result dependent on surrounding blocks, identify this limitation clearly.
+
+We need the closest deterministic representation of what a standalone map block visually produces.
+
+---
+
+# PART 7 — PRIMARY + SECONDARY TILESET HANDLING
+
+Porymap maps can use primary and secondary tilesets.
+
+The service must correctly understand the metatile ID ranges and ownership rules used by Porymap.
+
+Do NOT assume arbitrary ID ranges.
+
+Use Porymap's existing constants/models.
+
+The result should make it possible to ask:
+
+```text
+What are every available metatile and rendered image
+for this primary + secondary tileset combination?
+```
+
+Return a collection suitable for later matching.
+
+For example conceptually:
+
+```text
+RenderedMetatile
+{
+    metatileId
+    sourceTileset
+    image
+}
+```
+
+Use C++/Qt structures appropriate to the existing project rather than blindly copying this pseudocode.
+
+---
+
+# PART 8 — ANALYSIS RESULT IN THE IMPORT DIALOG
+
+Once:
+
+* PNG is valid
+* dimensions are valid
+* primary tileset is selected
+* secondary tileset is selected
+* metatiles can be rendered
+
+display an analysis summary.
+
+Example:
+
+```text
+IMAGE ANALYSIS
+
+Source:
+896 × 608 px
+
+Detected Map:
+56 × 38 blocks
+
+Primary Tileset:
+gTileset_General
+
+Secondary Tileset:
+gTileset_AgateVillage
+
+Available Metatiles:
+824
+
+Rendered Metatiles:
+824
+
+Image Alignment:
+Valid
+
+Status:
+READY FOR MATCHING
+```
+
+The exact UI can follow Porymap's existing design language.
+
+Do not hardcode the example numbers.
+
+---
+
+# PART 9 — DEBUG/DEVELOPER VERIFICATION
+
+We need a way to verify that deterministic metatile rendering actually works before building the matcher.
+
+Add a developer/debug mechanism that can optionally export rendered metatiles to PNG.
+
+This should NOT clutter the normal user interface.
+
+An appropriate debug command, development action, helper, or temporary developer-only option is acceptable.
+
+Example output:
+
+```text
+debug_metatiles/
+
+0000.png
+0001.png
+0002.png
+0003.png
+...
+```
+
+This is for development verification.
+
+Each exported PNG should correspond exactly to the rendered image returned by the service.
+
+Include enough information to associate the PNG with:
+
+* metatile ID
+* primary/secondary ownership if relevant
+
+Do not make debug export part of normal project save behavior.
+
+---
+
+# PART 10 — PERFORMANCE
+
+Do not prematurely over-optimize, but avoid obviously inefficient architecture.
+
+The future matcher may compare thousands of image cells against hundreds of metatiles.
+
+For this task:
+
+* Render each unique metatile once per analysis.
+* Cache results for the selected tileset combination where reasonable.
+* Invalidate the cache if relevant tileset data changes.
+* Do not repeatedly render the same metatile for every image cell.
+
+The future matching engine should be able to consume the already-rendered collection.
+
+---
+
+# PART 11 — ERROR HANDLING
+
+Handle situations such as:
+
+* No project loaded
+* Invalid PNG
+* Missing PNG
+* Invalid image dimensions
+* No primary tileset
+* Invalid secondary tileset
+* Missing graphics assets
+* Failed palette loading
+* Failed metatile rendering
+
+Do not crash.
+
+Provide useful errors.
+
+The existing Porymap editor must remain usable if Studio image import fails.
+
+---
+
+# PART 12 — TESTING
+
+Add focused tests where practical.
+
+The repository currently lacks a broad automated unit-test framework, so do not spend this task building a massive testing system.
+
+However, test the new logic as much as reasonably possible.
+
+At minimum verify:
+
+### MapImageAnalyzer
+
+* Valid PNG
+* Invalid file
+* Correct dimensions
+* Correct map-size calculation
+* Invalid grid alignment
+
+### Metatile Rendering
+
+Verify deterministic output where possible.
+
+Rendering the same metatile twice with unchanged assets should produce identical pixel data.
+
+If automated testing is impractical because of Porymap's architecture, create a documented reproducible developer test instead.
+
+---
+
+# PART 13 — DO NOT IMPLEMENT MATCHING YET
+
+Do NOT implement:
+
+* Exact matching
+* Fuzzy matching
+* Confidence scoring
+* Automatic map creation
+* Layout modification
+* Porytiles integration
+* New tileset generation
+* Collision detection
+* AI features
+
+This phase ends at:
+
+**READY FOR MATCHING**
+
+That boundary is intentional.
+
+---
+
+# PART 14 — PRESERVE UPSTREAM COMPATIBILITY
+
+Do not make large unrelated changes.
+
+Avoid modifying existing Porymap classes unless integration requires it.
+
+Prefer Studio-specific components.
+
+If an existing Porymap component needs a small extension to expose rendering functionality, make the smallest reasonable change.
+
+Document those upstream-touching modifications.
+
+Existing Porymap functionality must continue working.
+
+---
+
+# FINAL ACCEPTANCE TEST
+
+At the end I should be able to:
+
+1. Launch Porymap Studio.
+
+2. Open a compatible pokeemerald-expansion project.
+
+3. Select:
+
+   **File → New Map From Image…**
+
+4. Choose a full-map PNG.
+
+5. See the PNG preview.
+
+6. See its exact dimensions.
+
+7. Select the project's primary and secondary tilesets.
+
+8. See the detected map dimensions.
+
+9. Run image analysis.
+
+10. Have Porymap Studio render the available metatiles.
+
+11. See the number of successfully rendered metatiles.
+
+12. Reach:
+
+**READY FOR MATCHING**
+
+No map needs to be generated yet.
+
+---
+
+# FINAL REPORT
+
+When finished, provide:
+
+## Files Added
+
+List every new file.
+
+## Existing Files Modified
+
+List every existing Porymap file touched.
+
+Explain why each modification was necessary.
+
+## MapImageAnalyzer
+
+Explain how image dimensions and map dimensions are calculated.
+
+## MetatileRenderService
+
+Explain exactly how metatiles are rendered.
+
+Explain which existing Porymap rendering/model code was reused.
+
+## Primary/Secondary Tilesets
+
+Explain how metatile IDs and ownership are handled.
+
+## Pixel Accuracy
+
+Explain why the resulting images are deterministic and suitable for matching.
+
+## Debug Export
+
+Explain how I can export the rendered metatile PNGs for verification.
+
+## Build Results
+
+Run:
+
+* Replit/Linux build
+* Existing tests/checks
+* Native startup test where possible
+
+Do not break existing GitHub Actions.
+
+## Known Limitations
+
+Clearly document anything that could affect future matching accuracy.
+
+## Next Task
+
+Do NOT automatically implement it.
+
+The next development task will be:
+
+**Exact Image-to-Metatile Matching + Reconstruction Preview**
