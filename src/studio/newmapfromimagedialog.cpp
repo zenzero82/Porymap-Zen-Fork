@@ -16,11 +16,13 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QPlainTextEdit>
 #include <QPixmap>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSpinBox>
+#include <QTabWidget>
 #include <QVBoxLayout>
 
 #include <utility>
@@ -88,14 +90,38 @@ NewMapFromImageDialog::NewMapFromImageDialog(
     auto *previewAndSummary = new QHBoxLayout();
     auto *previewGroup = new QGroupBox(QStringLiteral("Image Preview"), this);
     auto *previewLayout = new QVBoxLayout(previewGroup);
-    m_previewScrollArea = new QScrollArea(previewGroup);
-    m_previewScrollArea->setWidgetResizable(false);
-    m_previewLabel = new QLabel(m_previewScrollArea);
-    m_previewLabel->setAlignment(Qt::AlignCenter);
-    m_previewLabel->setText(QStringLiteral("Choose a PNG image to preview it."));
-    m_previewScrollArea->setWidget(m_previewLabel);
-    m_previewScrollArea->viewport()->installEventFilter(this);
-    previewLayout->addWidget(m_previewScrollArea);
+    m_previewTabs = new QTabWidget(previewGroup);
+    const auto createPreview = [this](QScrollArea *&scrollArea, QLabel *&label, const QString &placeholder) {
+        scrollArea = new QScrollArea(m_previewTabs);
+        scrollArea->setWidgetResizable(false);
+        label = new QLabel(scrollArea);
+        label->setAlignment(Qt::AlignCenter);
+        label->setText(placeholder);
+        scrollArea->setWidget(label);
+        scrollArea->viewport()->installEventFilter(this);
+        return scrollArea;
+    };
+    m_previewTabs->addTab(
+        createPreview(m_previewScrollArea, m_previewLabel, QStringLiteral("Choose a PNG image to preview it.")),
+        QStringLiteral("Original")
+    );
+    m_previewTabs->addTab(
+        createPreview(
+            m_reconstructedPreviewScrollArea,
+            m_reconstructedPreviewLabel,
+            QStringLiteral("Run analysis to preview the reconstruction.")
+        ),
+        QStringLiteral("Reconstructed")
+    );
+    m_previewTabs->addTab(
+        createPreview(
+            m_differencePreviewScrollArea,
+            m_differencePreviewLabel,
+            QStringLiteral("Run analysis to preview unmatched cells.")
+        ),
+        QStringLiteral("Differences")
+    );
+    previewLayout->addWidget(m_previewTabs);
     previewAndSummary->addWidget(previewGroup, 3);
 
     auto *analysisGroup = new QGroupBox(QStringLiteral("Image Analysis"), this);
@@ -109,6 +135,8 @@ NewMapFromImageDialog::NewMapFromImageDialog(
 
     auto *buttonBox = new QDialogButtonBox(QDialogButtonBox::Close, this);
     m_analyzeButton = buttonBox->addButton(QStringLiteral("Run Analysis"), QDialogButtonBox::ActionRole);
+    m_reviewUnmatchedButton = buttonBox->addButton(QStringLiteral("Review Unmatched"), QDialogButtonBox::ActionRole);
+    m_reviewUnmatchedButton->setEnabled(false);
 #ifndef QT_NO_DEBUG
     m_debugExportButton = buttonBox->addButton(QStringLiteral("Export Debug Metatiles..."), QDialogButtonBox::ActionRole);
     m_debugExportButton->setEnabled(false);
@@ -117,6 +145,7 @@ NewMapFromImageDialog::NewMapFromImageDialog(
 
     connect(browseButton, &QPushButton::clicked, this, &NewMapFromImageDialog::browseForImage);
     connect(m_analyzeButton, &QPushButton::clicked, this, &NewMapFromImageDialog::runAnalysis);
+    connect(m_reviewUnmatchedButton, &QPushButton::clicked, this, &NewMapFromImageDialog::reviewUnmatched);
     connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
     connect(m_autoDimensions, &QCheckBox::toggled, this, [this] {
         updateDimensionControls();
@@ -145,7 +174,10 @@ NewMapFromImageDialog::NewMapFromImageDialog(
 
 bool NewMapFromImageDialog::eventFilter(QObject *watched, QEvent *event)
 {
-    if (watched == m_previewScrollArea->viewport() && event->type() == QEvent::Resize) {
+    if ((watched == m_previewScrollArea->viewport()
+            || watched == m_reconstructedPreviewScrollArea->viewport()
+            || watched == m_differencePreviewScrollArea->viewport())
+        && event->type() == QEvent::Resize) {
         updatePreview();
     }
     return QDialog::eventFilter(watched, event);
@@ -202,23 +234,41 @@ bool NewMapFromImageDialog::loadImage(const QString &filepath)
 
 void NewMapFromImageDialog::updatePreview()
 {
-    if (!m_imageResult.loaded || m_imageResult.sourceImage.isNull()) {
+    updatePreviewForImage(m_imageResult.sourceImage, m_previewScrollArea, m_previewLabel);
+    updatePreviewForImage(
+        m_matchResult.reconstructedImage,
+        m_reconstructedPreviewScrollArea,
+        m_reconstructedPreviewLabel
+    );
+    updatePreviewForImage(
+        m_matchResult.differenceImage,
+        m_differencePreviewScrollArea,
+        m_differencePreviewLabel
+    );
+}
+
+void NewMapFromImageDialog::updatePreviewForImage(
+    const QImage &image,
+    QScrollArea *scrollArea,
+    QLabel *label)
+{
+    if (image.isNull()) {
         return;
     }
 
-    QSize targetSize = m_previewScrollArea->viewport()->size();
-    targetSize = targetSize.boundedTo(m_imageResult.sourceImage.size());
+    QSize targetSize = scrollArea->viewport()->size();
+    targetSize = targetSize.boundedTo(image.size());
     if (targetSize.isEmpty()) {
         return;
     }
 
-    const QPixmap preview = QPixmap::fromImage(m_imageResult.sourceImage.scaled(
+    const QPixmap preview = QPixmap::fromImage(image.scaled(
         targetSize,
         Qt::KeepAspectRatio,
         Qt::FastTransformation
     ));
-    m_previewLabel->setPixmap(preview);
-    m_previewLabel->resize(preview.size());
+    label->setPixmap(preview);
+    label->resize(preview.size());
 }
 
 void NewMapFromImageDialog::resetAnalysis(const QString &message)
@@ -227,6 +277,12 @@ void NewMapFromImageDialog::resetAnalysis(const QString &message)
         m_analysisSummary->setPlainText(QString("STATUS\n%1").arg(message));
     }
     m_renderResult = {};
+    m_matchResult = {};
+    m_reconstructedPreviewLabel->clear();
+    m_reconstructedPreviewLabel->setText(QStringLiteral("Run analysis to preview the reconstruction."));
+    m_differencePreviewLabel->clear();
+    m_differencePreviewLabel->setText(QStringLiteral("Run analysis to preview unmatched cells."));
+    m_reviewUnmatchedButton->setEnabled(false);
 #ifndef QT_NO_DEBUG
     m_debugExportButton->setEnabled(false);
 #endif
@@ -285,47 +341,101 @@ void NewMapFromImageDialog::runAnalysis()
          .arg(mapSize.height()));
         return;
     }
-    QString summary = QString(
-        "IMAGE ANALYSIS\n\n"
-        "Source:\n"
-        "%1 × %2 px\n\n"
-        "Detected Map:\n"
-        "%3 × %4 blocks\n\n"
-        "Map Name:\n"
-        "%5\n\n"
-        "Primary Tileset:\n"
-        "%6\n\n"
-        "Secondary Tileset:\n"
-        "%7\n\n"
-        "Rendering Context:\n"
-        "%8\n\n"
-        "Available Metatiles:\n"
-        "%9\n\n"
-        "Rendered Metatiles:\n"
-        "%10\n\n"
-        "Image Alignment:\n"
-        "Valid (%11 × %12 px per metatile)\n\n"
-        "Status:\n"
-        "READY FOR MATCHING"
-    ).arg(m_imageResult.imageSize.width())
-     .arg(m_imageResult.imageSize.height())
-     .arg(mapSize.width())
-     .arg(mapSize.height())
-     .arg(m_mapName->text().isEmpty() ? QStringLiteral("(not set)") : m_mapName->text())
-     .arg(primaryTileset->name)
-     .arg(secondaryTileset->name)
-     .arg(m_renderContext.description)
-     .arg(m_renderResult.availableMetatileCount)
-     .arg(m_renderResult.metatiles.count())
-     .arg(Metatile::pixelWidth())
-     .arg(Metatile::pixelHeight());
-    if (!m_renderResult.warnings.isEmpty()) {
-        summary.append(QString("\n\nWarnings:\n%1").arg(m_renderResult.warnings.join('\n')));
+    m_matchResult = m_matcher.match(
+        m_imageResult.sourceImage,
+        mapSize,
+        m_imageResult.metatilePixelSize,
+        m_renderResult.metatiles
+    );
+    if (!m_matchResult.isValid()) {
+        resetAnalysis(m_matchResult.errorMessage);
+        return;
     }
+
+    const int cellCount = m_matchResult.cells.count();
+    const double matchPercentage = cellCount == 0
+        ? 0.0
+        : (100.0 * m_matchResult.exactMatchCount) / cellCount;
+    const QString summary = QString(
+        "RECONSTRUCTION RESULTS\n\n"
+        "Map:\n"
+        "%1 × %2 blocks\n\n"
+        "Cells Analyzed:\n"
+        "%3\n\n"
+        "Exact Matches:\n"
+        "%4  %5%\n\n"
+        "Unmatched:\n"
+        "%6\n\n"
+        "Primary Tileset:\n"
+        "%7 matches\n\n"
+        "Secondary Tileset:\n"
+        "%8 matches\n\n"
+        "Rendering Context:\n"
+        "%9\n\n"
+        "Status:\n"
+        "%10"
+    ).arg(mapSize.width())
+     .arg(mapSize.height())
+     .arg(cellCount)
+     .arg(m_matchResult.exactMatchCount)
+     .arg(QString::number(matchPercentage, 'f', 1))
+     .arg(m_matchResult.unmatchedCount)
+     .arg(m_matchResult.primaryMatchCount)
+     .arg(m_matchResult.secondaryMatchCount)
+     .arg(m_renderContext.description)
+     .arg(m_matchResult.unmatchedCount == 0
+        ? QStringLiteral("EXACT RECONSTRUCTION READY")
+        : QString("%1 cells require attention").arg(m_matchResult.unmatchedCount));
     m_analysisSummary->setPlainText(summary);
+    updatePreview();
+    m_reviewUnmatchedButton->setEnabled(m_matchResult.unmatchedCount > 0);
 #ifndef QT_NO_DEBUG
     m_debugExportButton->setEnabled(!m_renderResult.metatiles.isEmpty());
 #endif
+}
+
+void NewMapFromImageDialog::reviewUnmatched()
+{
+    if (m_matchResult.unmatchedCount == 0) {
+        return;
+    }
+
+    QDialog reviewDialog(this);
+    reviewDialog.setWindowTitle(QStringLiteral("Review Unmatched Cells"));
+    reviewDialog.setMinimumSize(520, 360);
+    auto *layout = new QHBoxLayout(&reviewDialog);
+    auto *cellList = new QListWidget(&reviewDialog);
+    auto *previewLabel = new QLabel(&reviewDialog);
+    previewLabel->setAlignment(Qt::AlignCenter);
+    previewLabel->setMinimumSize(180, 180);
+
+    QList<const ImageMetatileMatcher::CellResult *> unmatchedCells;
+    for (const auto &cell : m_matchResult.cells) {
+        if (!cell.matched) {
+            unmatchedCells.append(&cell);
+            cellList->addItem(QString("Column %1, Row %2")
+                .arg(cell.position.x())
+                .arg(cell.position.y()));
+        }
+    }
+
+    layout->addWidget(cellList, 2);
+    layout->addWidget(previewLabel, 1);
+    connect(cellList, &QListWidget::currentRowChanged, &reviewDialog, [previewLabel, unmatchedCells](int row) {
+        if (row < 0 || row >= unmatchedCells.count()) {
+            previewLabel->clear();
+            return;
+        }
+        previewLabel->setPixmap(QPixmap::fromImage(unmatchedCells.at(row)->sourceImage.scaled(
+            160,
+            160,
+            Qt::KeepAspectRatio,
+            Qt::FastTransformation
+        )));
+    });
+
+    cellList->setCurrentRow(0);
+    reviewDialog.exec();
 }
 
 void NewMapFromImageDialog::exportDebugMetatiles()

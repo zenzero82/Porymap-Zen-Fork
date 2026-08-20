@@ -2,6 +2,7 @@
 
 #include <QDialog>
 
+#include "studio/imagemetatilematcher.h"
 #include "studio/mapimageanalyzer.h"
 #include "studio/metatilerenderservice.h"
 
@@ -14,6 +15,7 @@ class QPlainTextEdit;
 class QPushButton;
 class QScrollArea;
 class QSpinBox;
+class QTabWidget;
 class Project;
 
 namespace Studio {
@@ -38,11 +40,18 @@ private:
     MapImageAnalyzer::Result m_imageResult;
     MetatileRenderService m_renderService;
     MetatileRenderService::Result m_renderResult;
+    ImageMetatileMatcher m_matcher;
+    ImageMetatileMatcher::Result m_matchResult;
 
     QLineEdit *m_imagePath = nullptr;
     QLabel *m_imageDimensions = nullptr;
     QLabel *m_previewLabel = nullptr;
     QScrollArea *m_previewScrollArea = nullptr;
+    QLabel *m_reconstructedPreviewLabel = nullptr;
+    QScrollArea *m_reconstructedPreviewScrollArea = nullptr;
+    QLabel *m_differencePreviewLabel = nullptr;
+    QScrollArea *m_differencePreviewScrollArea = nullptr;
+    QTabWidget *m_previewTabs = nullptr;
     QLineEdit *m_mapName = nullptr;
     QComboBox *m_primaryTileset = nullptr;
     QComboBox *m_secondaryTileset = nullptr;
@@ -51,6 +60,7 @@ private:
     QSpinBox *m_mapHeight = nullptr;
     QPlainTextEdit *m_analysisSummary = nullptr;
     QPushButton *m_analyzeButton = nullptr;
+    QPushButton *m_reviewUnmatchedButton = nullptr;
 #ifndef QT_NO_DEBUG
     QPushButton *m_debugExportButton = nullptr;
 #endif
@@ -58,8 +68,10 @@ private:
     void browseForImage();
     bool loadImage(const QString &filepath);
     void updatePreview();
+    void updatePreviewForImage(const QImage &image, QScrollArea *scrollArea, QLabel *label);
     void resetAnalysis(const QString &message = QString());
     void runAnalysis();
+    void reviewUnmatched();
     void exportDebugMetatiles();
     void updateDimensionControls();
 };

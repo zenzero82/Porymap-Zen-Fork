@@ -66,6 +66,21 @@ Phase 1 deliberately ends after the dialog reports **READY FOR MATCHING**.
 It does not create or edit a map, layout, tileset, collision data, or project
 file.
 
+### Phase 2 exact reconstruction boundary
+
+`Studio::ImageMetatileMatcher` splits only the unchanged, grid-aligned source
+image into metatile-sized cells. It normalizes source cells and the Phase 1
+candidate images to `QImage::Format_RGBA8888`, then performs exact byte-for-byte
+pixel matching. It intentionally has no fuzzy, ranked, or approximate mode.
+
+The matcher retains a coordinate, source-cell image, and matched metatile
+identity (when present) for every cell. It builds reconstructed and difference
+`QImage` previews in memory: a complete exact result is byte-equal to the
+normalized source image, while unmatched cells are visibly highlighted for
+review. The dialog offers Original, Reconstructed, and Differences tabs plus
+an unmatched-cell inspector. None of these actions creates, changes, or saves
+maps, layouts, tilesets, collision data, or project files.
+
 #### Reproducible developer verification
 
 1. Build with `./scripts/replit-build.sh`.
@@ -78,6 +93,13 @@ file.
    local names such as `primary_0000.png` and `secondary_0000.png`.
 6. Repeat with a PNG whose width or height is not divisible by the metatile
    size and confirm that alignment fails before rendering or project changes.
+7. For a PNG known to use the selected tilesets, run analysis and confirm that
+   the reconstructed tab is visually identical to the original, the
+   differences tab is transparent, and the summary reports 100.0% exact
+   matches.
+8. For a PNG containing at least one non-tileset cell, confirm that unmatched
+   cells are counted, highlighted in the differences tab, and listed by
+   **Review Unmatched**, with no project dirty state or file change.
 
 ### Matching pipeline boundary
 
