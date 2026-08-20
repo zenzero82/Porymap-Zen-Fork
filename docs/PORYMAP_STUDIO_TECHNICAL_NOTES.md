@@ -60,7 +60,7 @@ models do not expose reliable revision signals.
 
 Analysis is only READY when every available candidate rendered successfully.
 Manual map dimensions are accepted only when they exactly match the aligned,
-unchanged PNG dimensions.
+unchanged PNG dimensions and pass `Project::mapDimensionsValid()`.
 
 Phase 1 deliberately ends after the dialog reports **READY FOR MATCHING**.
 It does not create or edit a map, layout, tileset, collision data, or project

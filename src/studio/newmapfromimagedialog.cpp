@@ -122,6 +122,16 @@ NewMapFromImageDialog::NewMapFromImageDialog(
         updateDimensionControls();
         resetAnalysis(QStringLiteral("Map dimensions changed. Run analysis again."));
     });
+    connect(m_mapWidth, qOverload<int>(&QSpinBox::valueChanged), this, [this] {
+        if (!m_autoDimensions->isChecked()) {
+            resetAnalysis(QStringLiteral("Map dimensions changed. Run analysis again."));
+        }
+    });
+    connect(m_mapHeight, qOverload<int>(&QSpinBox::valueChanged), this, [this] {
+        if (!m_autoDimensions->isChecked()) {
+            resetAnalysis(QStringLiteral("Map dimensions changed. Run analysis again."));
+        }
+    });
     connect(m_primaryTileset, &QComboBox::currentTextChanged, this, [this] {
         resetAnalysis(QStringLiteral("Primary tileset changed. Run analysis again."));
     });
@@ -265,7 +275,16 @@ void NewMapFromImageDialog::runAnalysis()
         return;
     }
 
-    const QSize mapSize = m_autoDimensions->isChecked() ? m_imageResult.mapSize : QSize(m_mapWidth->value(), m_mapHeight->value());
+    const QSize mapSize = m_autoDimensions->isChecked()
+        ? m_imageResult.mapSize
+        : QSize(m_mapWidth->value(), m_mapHeight->value());
+    if (!m_project->mapDimensionsValid(mapSize.width(), mapSize.height())) {
+        resetAnalysis(QString(
+            "Porymap rejects map dimensions %1 × %2 blocks for this project."
+        ).arg(mapSize.width())
+         .arg(mapSize.height()));
+        return;
+    }
     QString summary = QString(
         "IMAGE ANALYSIS\n\n"
         "Source:\n"
