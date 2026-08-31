@@ -216,7 +216,7 @@ The matcher should return data only. It must not create files or mutate
 `Project`, `Map`, or `Layout`. An import coordinator can later translate an
 approved result through existing undoable edit paths.
 
-## Future Porytiles integration
+## Porytiles subprocess integration
 
 ### Current command-line model
 
@@ -260,20 +260,28 @@ Compilation produces the assets Porymap already consumes, including:
 The behavior constants header is required to map named behaviors to the numeric
 attributes stored by the target decompilation project.
 
-### Recommended integration
+### Implemented integration
 
-Start with a subprocess adapter rather than linking or copying Porytiles:
+The Studio integration uses a subprocess adapter rather than linking or copying
+Porytiles:
 
-1. Let the user configure a Porytiles executable.
-2. Query and validate its version before enabling actions.
+1. Let the user configure an explicit Porytiles executable and exact version.
+2. Query and validate its version before starting an operation.
 3. Use `QProcess` with an argument list, never a shell command string.
 4. Stage source/output in a dedicated temporary or preview directory.
 5. Capture stdout, stderr, exit status, warnings, and elapsed time.
 6. Support cancellation and a bounded timeout.
-7. Validate every expected output before replacing project assets.
+7. Validate expected files, non-empty binary/palette output, and readable PNGs
+   before replacing project assets.
 8. Show a preview/summary and require confirmation.
-9. Refresh assets through existing `Project`/`Tileset` loaders and file-watcher
-   behavior.
+9. Preserve unrelated target files, swap the prepared directory with rollback,
+   and refresh through existing tileset loaders only after confirmation.
+
+The Tileset Editor exposes this workflow through **File → Porytiles
+Integration…**. Unsaved in-editor changes block the operation. Primary and
+secondary compile/decompile commands use the documented legacy positional
+forms, with the required primary source or compiled context staged for
+secondary operations.
 
 This approach minimizes modifications to both projects, keeps licensing and
 versioning boundaries clear, and allows Porytiles to evolve independently.

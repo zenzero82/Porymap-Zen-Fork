@@ -125,6 +125,7 @@ private:
     void importAdvanceMapMetatiles(Tileset*);
     void exportTilesImage(Tileset*);
     void exportPorytilesLayerImages(Tileset*);
+    void openPorytilesIntegration();
     void exportMetatilesImage();
     void refresh();
     void commitMetatileLabel();

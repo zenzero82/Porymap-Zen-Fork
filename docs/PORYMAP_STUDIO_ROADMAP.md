@@ -73,9 +73,15 @@ compatible with future upstream merges.
 
 ## Milestone 7 — Porytiles integration
 
-- Invoke a pinned, user-configured Porytiles executable as a subprocess.
-- Stage inputs and outputs safely.
-- Preview changes before refreshing Porymap tilesets.
+**Status: complete.**
+
+- Invokes a pinned, explicitly selected Porytiles executable through `QProcess`
+  with structured arguments.
+- Stages inputs and generated output in an isolated temporary directory.
+- Captures diagnostics, supports timeout/cancellation, validates generated
+  assets, and requires an explicit preview confirmation before replacement.
+- Preserves unrelated target files and refreshes active Porymap tilesets only
+  after confirmed compile output is installed.
 
 ## Milestone 8 — Generate tilesets from complete artwork
 

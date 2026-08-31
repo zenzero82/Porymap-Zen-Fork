@@ -9,7 +9,11 @@ Current and planned feature areas:
 - `MapImageAnalyzer` — Phase 1 PNG validation and map-grid analysis only.
 - `MetatileRenderService` — Phase 1 deterministic metatile rendering only.
 - Future `imageimport/` — matching and import orchestration.
-- Future `tilesets/` — Porytiles process integration.
+- `PorytilesProcess` — UI-independent version-pinned `QProcess` adapter,
+  temporary staging, output validation, cancellation/timeout, and rollback-safe
+  confirmed application.
+- `PorytilesDialog` — Tileset Editor configuration, diagnostics, preview, and
+  explicit confirmation UI.
 - `build/` — project build/test process orchestration.
 
 Create these subdirectories only when their first real implementation is added.

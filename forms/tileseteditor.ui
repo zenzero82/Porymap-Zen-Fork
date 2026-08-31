@@ -892,6 +892,8 @@
     <addaction name="menuExport_Tiles_Image"/>
     <addaction name="actionExport_Metatiles_Image"/>
     <addaction name="menuExport_porytiles_Layer_Images"/>
+     <addaction name="separator"/>
+     <addaction name="actionPorytiles_Integration"/>
    </widget>
    <widget class="QMenu" name="menuTools">
     <property name="title">
@@ -949,6 +951,14 @@
     <string>Ctrl+S</string>
    </property>
   </action>
+   <action name="actionPorytiles_Integration">
+    <property name="text">
+     <string>Porytiles Integration...</string>
+    </property>
+    <property name="toolTip">
+     <string>Compile or decompile a tileset with a validated Porytiles executable</string>
+    </property>
+   </action>
   <action name="actionChange_Metatiles_Count">
    <property name="text">
     <string>Change Number of Metatiles...</string>

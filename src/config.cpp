@@ -359,6 +359,9 @@ void PorymapConfig::reset() {
     this->wildMonChartTheme = "";
     this->textEditorOpenFolder = "";
     this->textEditorGotoLine = "";
+    this->porytilesExecutable = "";
+    this->porytilesExpectedVersion = "";
+    this->porytilesTimeoutSeconds = 120;
     this->paletteEditorBitDepth = 24;
     this->projectSettingsTab = 0;
     this->scriptAutocompleteMode = ScriptAutocompleteMode::MapOnly;
@@ -509,6 +512,12 @@ void PorymapConfig::parseConfigKeyValue(QString key, QString value) {
         this->textEditorOpenFolder = value;
     } else if (key == "text_editor_goto_line") {
         this->textEditorGotoLine = value;
+    } else if (key == "porytiles_executable") {
+        this->porytilesExecutable = value;
+    } else if (key == "porytiles_expected_version") {
+        this->porytilesExpectedVersion = value;
+    } else if (key == "porytiles_timeout_seconds") {
+        this->porytilesTimeoutSeconds = getConfigInteger(key, value, 1, 3600, 120);
     } else if (key == "palette_editor_bit_depth") {
         this->paletteEditorBitDepth = getConfigInteger(key, value, 15, 24, 24);
         if (this->paletteEditorBitDepth != 15 && this->paletteEditorBitDepth != 24){
@@ -650,6 +659,9 @@ QMap<QString, QString> PorymapConfig::getKeyValueMap() {
     map.insert("wild_mon_chart_theme", this->wildMonChartTheme);
     map.insert("text_editor_open_directory", this->textEditorOpenFolder);
     map.insert("text_editor_goto_line", this->textEditorGotoLine);
+    map.insert("porytiles_executable", this->porytilesExecutable);
+    map.insert("porytiles_expected_version", this->porytilesExpectedVersion);
+    map.insert("porytiles_timeout_seconds", QString::number(this->porytilesTimeoutSeconds));
     map.insert("palette_editor_bit_depth", QString::number(this->paletteEditorBitDepth));
     map.insert("project_settings_tab", QString::number(this->projectSettingsTab));
     map.insert("script_autocomplete_mode", QString::number(this->scriptAutocompleteMode));

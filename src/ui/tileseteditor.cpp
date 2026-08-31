@@ -1,4 +1,5 @@
 #include "tileseteditor.h"
+#include "studio/porytilesdialog.h"
 #include "ui_tileseteditor.h"
 #include "log.h"
 #include "imageproviders.h"
@@ -57,6 +58,7 @@ TilesetEditor::TilesetEditor(Project *project, Layout *layout, QWidget *parent) 
 
     connect(ui->actionExport_Primary_Porytiles_Layer_Images,   &QAction::triggered, [this] { exportPorytilesLayerImages(this->primaryTileset); });
     connect(ui->actionExport_Secondary_Porytiles_Layer_Images, &QAction::triggered, [this] { exportPorytilesLayerImages(this->secondaryTileset); });
+    connect(ui->actionPorytiles_Integration, &QAction::triggered, this, &TilesetEditor::openPorytilesIntegration);
 
     connect(ui->actionExport_Metatiles_Image, &QAction::triggered, [this] { exportMetatilesImage(); });
 
@@ -76,6 +78,24 @@ TilesetEditor::TilesetEditor(Project *project, Layout *layout, QWidget *parent) 
     setMetatileLayerOrientation(porymapConfig.tilesetEditorLayerOrientation);
     this->metatileSelector->select(0);
     restoreWindowState();
+}
+
+void TilesetEditor::openPorytilesIntegration()
+{
+    if (this->hasUnsavedChanges) {
+        QMessageBox::warning(this,
+                             QStringLiteral("Unsaved Tileset Changes"),
+                             QStringLiteral("Save or discard the current Tileset Editor changes before running Porytiles."));
+        return;
+    }
+
+    Studio::PorytilesDialog dialog(this->project, this->primaryTileset, this->secondaryTileset, this);
+    connect(&dialog, &Studio::PorytilesDialog::compiledOutputApplied, this, [this] {
+        emit this->tilesetsSaved(this->primaryTileset->name, this->secondaryTileset->name);
+        this->setTilesets(this->primaryTileset->name, this->secondaryTileset->name);
+        this->refresh();
+    });
+    dialog.exec();
 }
 
 TilesetEditor::~TilesetEditor()

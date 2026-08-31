@@ -128,6 +128,9 @@ public:
     QString wildMonChartTheme;
     QString textEditorOpenFolder;
     QString textEditorGotoLine;
+    QString porytilesExecutable;
+    QString porytilesExpectedVersion;
+    int porytilesTimeoutSeconds;
     int paletteEditorBitDepth;
     int projectSettingsTab;
     ScriptAutocompleteMode scriptAutocompleteMode;
