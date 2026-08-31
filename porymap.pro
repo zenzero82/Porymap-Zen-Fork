@@ -159,6 +159,7 @@ SOURCES += src/core/advancemapparser.cpp \
     src/project.cpp \
     src/settings.cpp \
     src/studio/imagemetatilematcher.cpp \
+    src/studio/imagemetatileapproval.cpp \
     src/studio/mapimageanalyzer.cpp \
     src/studio/metatilerenderservice.cpp \
     src/studio/newmapfromimagedialog.cpp \
@@ -287,6 +288,7 @@ HEADERS  += include/core/advancemapparser.h \
     include/settings.h \
     include/studio/productinfo.h \
     include/studio/imagemetatilematcher.h \
+    include/studio/imagemetatileapproval.h \
     include/studio/mapimageanalyzer.h \
     include/studio/metatilerenderservice.h \
     include/studio/newmapfromimagedialog.h \

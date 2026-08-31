@@ -681,22 +681,23 @@ void NewMapFromImageDialog::createMapFromMatch()
             resetAnalysis(QStringLiteral("Match results are no longer valid. Run analysis again."));
             return;
         }
-        if (cell.matched) {
-            importedBlockdata[index] = Block(cell.metatileId, 0, 0);
-        } else {
-            const auto correctionIt = m_corrections.constFind(index);
-            if (correctionIt == m_corrections.cend()
-                || !correctionIt.value().approved
-                || !isCorrectionValid(cell, correctionIt.value())) {
-                QMessageBox::warning(
-                    this,
-                    QStringLiteral("Cannot Create Map"),
-                    QStringLiteral("A correction is stale or incomplete. Review the fuzzy suggestions again.")
-                );
-                resetAnalysis(QStringLiteral("Corrections changed. Review fuzzy suggestions again."));
-                return;
-            }
-            importedBlockdata[index] = Block(correctionIt.value().candidate.metatileId, 0, 0);
+        uint16_t metatileId = 0;
+        if (!ImageMetatileApproval::resolveMetatileId(
+                cell,
+                index,
+                m_corrections,
+                m_renderResult.metatiles,
+                &metatileId)) {
+            QMessageBox::warning(
+                this,
+                QStringLiteral("Cannot Create Map"),
+                QStringLiteral("A correction is stale or incomplete. Review the fuzzy suggestions again.")
+            );
+            resetAnalysis(QStringLiteral("Corrections changed. Review fuzzy suggestions again."));
+            return;
+        }
+        importedBlockdata[index] = Block(metatileId, 0, 0);
+        if (!cell.matched) {
             approvedCorrectionCount++;
         }
         populated[index] = true;
@@ -1060,29 +1061,24 @@ bool NewMapFromImageDialog::isCorrectionValid(
     const ImageMetatileMatcher::CellResult &cell,
     const Correction &correction) const
 {
-    if (!correction.approved || correction.sourceImage != cell.sourceImage) {
-        return false;
-    }
-    const auto *rendered = findRenderedCandidate(correction.candidate);
-    return rendered && rendered->image == correction.renderedImage;
+    return ImageMetatileApproval::isCorrectionValid(
+        cell,
+        correction,
+        m_renderResult.metatiles
+    );
 }
 
 bool NewMapFromImageDialog::allCellsResolved() const
 {
-    if (!m_matchResult.isValid() || m_matchResult.cells.isEmpty()) {
+    if (!m_matchResult.isValid()) {
         return false;
     }
-    for (const auto &cell : m_matchResult.cells) {
-        if (cell.matched) {
-            continue;
-        }
-        const auto correctionIt = m_corrections.constFind(cellIndex(cell));
-        if (correctionIt == m_corrections.cend()
-            || !isCorrectionValid(cell, correctionIt.value())) {
-            return false;
-        }
-    }
-    return true;
+    return ImageMetatileApproval::allCellsResolved(
+        m_matchResult.cells,
+        m_corrections,
+        m_matchResult.mapSize,
+        m_renderResult.metatiles
+    );
 }
 
 void NewMapFromImageDialog::updateCorrectionPreviews()

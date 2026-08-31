@@ -49,11 +49,15 @@ compatible with future upstream merges.
 
 ## Milestone 5 — Import preview and correction
 
+**Status: Complete.**
+
 - Preview proposed layout results.
 - Highlight uncertain and unmatched cells.
 - Let users choose alternatives before committing.
 - Require an explicit approval for every non-exact cell.
 - Revalidate source pixels and rendered candidates before map creation.
+- Keep native regression coverage for approval, replacement, clearing, stale
+  source/render rejection, exact preservation, and approved-ID resolution.
 
 ## Milestone 6 — Generate Porymap layouts
 

@@ -1,6 +1,8 @@
 #include "studio/imagemetatilematcher.h"
+#include "studio/imagemetatileapproval.h"
 
 #include <QColor>
+#include <QHash>
 #include <QImage>
 #include <QString>
 
@@ -12,6 +14,7 @@ namespace {
 using Matcher = Studio::ImageMetatileMatcher;
 using RenderedMetatile = Studio::MetatileRenderService::RenderedMetatile;
 using SourceTileset = Studio::MetatileRenderService::SourceTileset;
+using Correction = Studio::ImageMetatileCorrection;
 
 int failures = 0;
 
@@ -38,6 +41,15 @@ RenderedMetatile candidate(uint16_t id, const QImage &image)
     rendered.sourceTilesetName = QStringLiteral("TestTileset");
     rendered.image = image;
     return rendered;
+}
+
+Matcher::CandidateResult candidateResult(uint16_t id)
+{
+    Matcher::CandidateResult result;
+    result.metatileId = id;
+    result.sourceTileset = SourceTileset::Primary;
+    result.sourceTilesetName = QStringLiteral("TestTileset");
+    return result;
 }
 
 Matcher::Result match(
@@ -242,6 +254,129 @@ void testFuzzyMatchingCanBeCancelled()
     );
 }
 
+void testApprovalLifecycleAndExactResolution()
+{
+    const QImage source = solidImage(QColor(10, 20, 30, 255));
+    const QImage candidateImage = solidImage(QColor(40, 50, 60, 255));
+    const QList<RenderedMetatile> renderedMetatiles = {
+        candidate(7, candidateImage),
+        candidate(8, solidImage(QColor(70, 80, 90, 255))),
+    };
+
+    Matcher::CellResult exactCell;
+    exactCell.position = QPoint(0, 0);
+    exactCell.sourceImage = source;
+    exactCell.matched = true;
+    exactCell.metatileId = 99;
+
+    Matcher::CellResult fuzzyCell;
+    fuzzyCell.position = QPoint(1, 0);
+    fuzzyCell.sourceImage = source;
+    fuzzyCell.rankedCandidates = {candidateResult(7), candidateResult(8)};
+
+    QHash<int, Correction> corrections;
+    Correction correction;
+    correction.candidate = candidateResult(7);
+    correction.sourceImage = source;
+    correction.renderedImage = candidateImage;
+    corrections.insert(1, correction);
+
+    expect(
+        !Studio::ImageMetatileApproval::allCellsResolved(
+            {exactCell, fuzzyCell},
+            corrections,
+            QSize(2, 1),
+            renderedMetatiles
+        ),
+        "edited fuzzy correction must not count as approved"
+    );
+
+    corrections[1].approved = true;
+    expect(
+        Studio::ImageMetatileApproval::allCellsResolved(
+            {exactCell, fuzzyCell},
+            corrections,
+            QSize(2, 1),
+            renderedMetatiles
+        ),
+        "every non-exact cell with a valid approval should resolve the map"
+    );
+
+    uint16_t metatileId = 0;
+    expect(
+        Studio::ImageMetatileApproval::resolveMetatileId(
+            exactCell,
+            0,
+            corrections,
+            renderedMetatiles,
+            &metatileId
+        ) && metatileId == 99,
+        "exact cells must preserve their exact metatile ID"
+    );
+    expect(
+        Studio::ImageMetatileApproval::resolveMetatileId(
+            fuzzyCell,
+            1,
+            corrections,
+            renderedMetatiles,
+            &metatileId
+        ) && metatileId == 7,
+        "approved fuzzy cells must resolve to the approved candidate ID"
+    );
+
+    corrections[1].candidate = candidateResult(8);
+    corrections[1].renderedImage = renderedMetatiles.at(1).image;
+    corrections[1].approved = false;
+    expect(
+        !Studio::ImageMetatileApproval::allCellsResolved(
+            {exactCell, fuzzyCell},
+            corrections,
+            QSize(2, 1),
+            renderedMetatiles
+        ),
+        "replacing a candidate must require re-approval"
+    );
+
+    corrections.remove(1);
+    expect(
+        !Studio::ImageMetatileApproval::allCellsResolved(
+            {exactCell, fuzzyCell},
+            corrections,
+            QSize(2, 1),
+            renderedMetatiles
+        ),
+        "clearing a correction must make the cell unresolved"
+    );
+
+    correction.candidate = candidateResult(7);
+    correction.sourceImage = solidImage(QColor(11, 20, 30, 255));
+    correction.renderedImage = candidateImage;
+    correction.approved = true;
+    corrections.insert(1, correction);
+    expect(
+        !Studio::ImageMetatileApproval::allCellsResolved(
+            {exactCell, fuzzyCell},
+            corrections,
+            QSize(2, 1),
+            renderedMetatiles
+        ),
+        "changed source pixels must invalidate an approval"
+    );
+
+    correction.sourceImage = source;
+    correction.renderedImage = solidImage(QColor(1, 2, 3, 255));
+    corrections[1] = correction;
+    expect(
+        !Studio::ImageMetatileApproval::allCellsResolved(
+            {exactCell, fuzzyCell},
+            corrections,
+            QSize(2, 1),
+            renderedMetatiles
+        ),
+        "changed rendered candidate pixels must invalidate an approval"
+    );
+}
+
 } // namespace
 
 int main()
@@ -252,9 +387,10 @@ int main()
     testTransparentRgbDoesNotDistortFuzzyDistance();
     testInvalidOptionsAreRejected();
     testFuzzyMatchingCanBeCancelled();
+    testApprovalLifecycleAndExactResolution();
 
     if (failures == 0) {
-        std::cout << "All image metatile matcher tests passed.\n";
+        std::cout << "All Studio image matching and approval tests passed.\n";
     }
     return failures == 0 ? 0 : 1;
 }

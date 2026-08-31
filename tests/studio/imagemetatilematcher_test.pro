@@ -13,8 +13,10 @@ INCLUDEPATH += \
 
 SOURCES += \
     $$PWD/imagemetatilematcher_test.cpp \
+    $$PWD/../../src/studio/imagemetatileapproval.cpp \
     $$PWD/../../src/studio/imagemetatilematcher.cpp
 
 HEADERS += \
     $$PWD/../../include/studio/imagemetatilematcher.h \
+    $$PWD/../../include/studio/imagemetatileapproval.h \
     $$PWD/../../include/studio/metatilerenderservice.h

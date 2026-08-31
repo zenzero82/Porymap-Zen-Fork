@@ -150,6 +150,12 @@ creation. Approved metatile IDs then flow through the existing in-memory
 `Blockdata` creation path; collision and elevation remain zero and no project
 files are written until Porymap's normal save action.
 
+The dialog and native tests share the same approval validation and metatile-ID
+resolution helper. Regression coverage verifies that incomplete and cleared
+corrections block creation, replacements require re-approval, changed source or
+rendered pixels invalidate approvals, exact cells retain their exact IDs, and
+approved fuzzy cells resolve to the selected metatile ID.
+
 #### Reproducible developer verification
 
 1. Build with `./scripts/replit-build.sh`.

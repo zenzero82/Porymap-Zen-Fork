@@ -4,6 +4,7 @@
 #include <QHash>
 
 #include "studio/imagemetatilematcher.h"
+#include "studio/imagemetatileapproval.h"
 #include "studio/mapimageanalyzer.h"
 #include "studio/metatilerenderservice.h"
 
@@ -46,14 +47,7 @@ private:
     QImage m_analysisReconstructedImage;
     QImage m_analysisDifferenceImage;
 
-    struct Correction
-    {
-        ImageMetatileMatcher::CandidateResult candidate;
-        QImage sourceImage;
-        QImage renderedImage;
-        bool approved = false;
-    };
-
+    using Correction = ImageMetatileCorrection;
     QHash<int, Correction> m_corrections;
 
     QLineEdit *m_imagePath = nullptr;
