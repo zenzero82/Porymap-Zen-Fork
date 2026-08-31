@@ -1,4 +1,5 @@
 #include "project.h"
+#include "editcommands.h"
 #include "config.h"
 #include "history.h"
 #include "log.h"
@@ -504,6 +505,27 @@ bool Project::loadMapData(Map* map) {
 }
 
 Map *Project::createNewMap(const Project::NewMapSettings &settings, const Map* toDuplicate) {
+    return createNewMapInternal(settings, toDuplicate, nullptr);
+}
+
+Map *Project::createNewMap(const Project::NewMapSettings &settings, const Blockdata &initialBlockdata) {
+    return createNewMapInternal(settings, nullptr, &initialBlockdata);
+}
+
+Map *Project::createNewMapInternal(const Project::NewMapSettings &settings, const Map *toDuplicate,
+                                   const Blockdata *initialBlockdata) {
+    const int expectedBlockCount = settings.layout.width * settings.layout.height;
+    if (initialBlockdata && (expectedBlockCount <= 0 || initialBlockdata->count() != expectedBlockCount)) {
+        logError(QString("Cannot create new map '%1' with invalid initial blockdata.").arg(settings.name));
+        return nullptr;
+    }
+    if (initialBlockdata && this->mapLayouts.contains(settings.layout.id)) {
+        logError(QString("Cannot import map '%1' into existing layout '%2'.")
+                 .arg(settings.name)
+                 .arg(settings.layout.id));
+        return nullptr;
+    }
+
     Map *map = toDuplicate ? new Map(*toDuplicate) : new Map;
     map->setName(settings.name);
     map->setHeader(settings.header);
@@ -512,11 +534,10 @@ Map *Project::createNewMap(const Project::NewMapSettings &settings, const Map* t
     // Generate a unique MAP constant.
     map->setConstantName(toUniqueIdentifier(map->expectedConstantName()));
 
-    if (!this->groupNames.contains(settings.group)) {
+    const bool createsMapGroup = !this->groupNames.contains(settings.group);
+    if (createsMapGroup) {
         // Adding map to a map group that doesn't exist yet.
-        if (isValidNewIdentifier(settings.group)) {
-            addNewMapGroup(settings.group);
-        } else {
+        if (!isValidNewIdentifier(settings.group)) {
             logError(QString("Cannot create new map with invalid map group name '%1'.").arg(settings.group));
             delete map;
             return nullptr;
@@ -526,7 +547,11 @@ Map *Project::createNewMap(const Project::NewMapSettings &settings, const Map* t
     Layout *layout = this->mapLayouts.value(settings.layout.id);
     if (!layout) {
         // Layout doesn't already exist, create it.
-        layout = createNewLayout(settings.layout, toDuplicate ? toDuplicate->layout() : nullptr);
+        layout = createNewLayout(
+            settings.layout,
+            toDuplicate ? toDuplicate->layout() : nullptr,
+            initialBlockdata == nullptr
+        );
         if (!layout) {
             // Layout creation failed.
             delete map;
@@ -540,6 +565,15 @@ Map *Project::createNewMap(const Project::NewMapSettings &settings, const Map* t
         }
     }
     map->setLayout(layout);
+
+    if (initialBlockdata) {
+        layout->editHistory.push(new ImportMetatiles(layout, layout->blockdata, *initialBlockdata));
+        emit layoutCreated(layout);
+    }
+
+    if (createsMapGroup) {
+        addNewMapGroup(settings.group);
+    }
 
     // Try to record the MAPSEC name in case this is a new name.
     addNewMapsec(map->header()->location());
@@ -557,7 +591,8 @@ Map *Project::createNewMap(const Project::NewMapSettings &settings, const Map* t
     return map;
 }
 
-Layout *Project::createNewLayout(const Layout::Settings &settings, const Layout *toDuplicate) {
+Layout *Project::createNewLayout(const Layout::Settings &settings, const Layout *toDuplicate,
+                                 bool emitCreatedSignal) {
     if (this->mapLayouts.contains(settings.id))
         return nullptr;
 
@@ -600,7 +635,9 @@ Layout *Project::createNewLayout(const Layout::Settings &settings, const Layout 
     this->alphabeticalLayoutIds.append(layout->id);
     Util::numericalModeSort(this->alphabeticalLayoutIds);
 
-    emit layoutCreated(layout);
+    if (emitCreatedSignal) {
+        emit layoutCreated(layout);
+    }
 
     return layout;
 }

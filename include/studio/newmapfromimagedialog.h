@@ -53,6 +53,7 @@ private:
     QScrollArea *m_differencePreviewScrollArea = nullptr;
     QTabWidget *m_previewTabs = nullptr;
     QLineEdit *m_mapName = nullptr;
+    QComboBox *m_mapGroup = nullptr;
     QComboBox *m_primaryTileset = nullptr;
     QComboBox *m_secondaryTileset = nullptr;
     QCheckBox *m_autoDimensions = nullptr;
@@ -60,6 +61,7 @@ private:
     QSpinBox *m_mapHeight = nullptr;
     QPlainTextEdit *m_analysisSummary = nullptr;
     QPushButton *m_analyzeButton = nullptr;
+    QPushButton *m_createMapButton = nullptr;
     QPushButton *m_reviewUnmatchedButton = nullptr;
 #ifndef QT_NO_DEBUG
     QPushButton *m_debugExportButton = nullptr;
@@ -71,9 +73,11 @@ private:
     void updatePreviewForImage(const QImage &image, QScrollArea *scrollArea, QLabel *label);
     void resetAnalysis(const QString &message = QString());
     void runAnalysis();
+    void createMapFromMatch();
     void reviewUnmatched();
     void exportDebugMetatiles();
     void updateDimensionControls();
+    void updateCreateButton();
 };
 
 } // namespace Studio

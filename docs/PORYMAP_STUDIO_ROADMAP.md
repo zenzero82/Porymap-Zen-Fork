@@ -35,6 +35,8 @@ compatible with future upstream merges.
 - Split source artwork into metatile-sized cells.
 - Match exact pixels against rendered metatiles.
 - Return IDs and unmatched-cell diagnostics without changing a layout.
+- Create a normal Porymap map and layout only after a complete exact reconstruction is confirmed.
+- Populate standard blockdata in memory and leave persistence to Porymap's normal save flow.
 
 ## Milestone 4 — Fuzzy matching and confidence
 

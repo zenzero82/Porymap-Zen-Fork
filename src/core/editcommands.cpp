@@ -45,6 +45,10 @@ int getConnectionDirectionMask(const QList<QString> &directions) {
 }
 
 void renderBlocks(Layout *layout, bool ignoreCache = false) {
+    if (!layout->layoutItem || !layout->collisionItem) {
+        emit layout->needsRedrawing();
+        return;
+    }
     layout->layoutItem->draw(ignoreCache);
     layout->collisionItem->draw(ignoreCache);
 }

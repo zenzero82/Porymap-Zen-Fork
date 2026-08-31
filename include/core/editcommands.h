@@ -39,6 +39,7 @@ enum CommandId {
     ID_MapConnectionChangeMap,
     ID_MapConnectionAdd,
     ID_MapConnectionRemove,
+    ID_ImportMetatiles,
 };
 
 #define IDMask_EventType_Object  (1 << 8)
@@ -91,6 +92,20 @@ public:
     }
 
     int id() const override { return CommandId::ID_PaintCollision; }
+};
+
+/// Implements a single, non-mergeable import of a complete metatile layout.
+class ImportMetatiles : public PaintMetatile {
+public:
+    ImportMetatiles(Layout *layout,
+        const Blockdata &oldMetatiles, const Blockdata &newMetatiles,
+        QUndoCommand *parent = nullptr)
+      : PaintMetatile(layout, oldMetatiles, newMetatiles, 0, parent) {
+        setText("Import Map From Image");
+    }
+
+    bool mergeWith(const QUndoCommand *) override { return false; }
+    int id() const override { return CommandId::ID_ImportMetatiles; }
 };
 
 

@@ -4,6 +4,21 @@ These notes define the likely implementation path for the next rendering and
 tileset milestones. They document integration seams only; no matcher or
 Porytiles integration is implemented in the foundation.
 
+## Phase 3 map creation
+
+The New Map From Image flow can create a normal Porymap map only when every
+source cell has an exact metatile match. The commit step validates the map name,
+map group, dimensions, tilesets, layout identifier, and row-major cell coverage
+again so stale analysis cannot be applied.
+
+The new map and layout are created through `Project::createNewMap()`. Matched
+metatile IDs are applied as standard `Blockdata` through the layout undo stack;
+collision and elevation use their default zero values. Creation remains
+in-memory and unsaved until the user invokes Porymap's existing save flow.
+
+This phase does not overwrite existing maps or layouts, perform fuzzy matching,
+infer collision/elevation, or write a parallel map format.
+
 ## Future metatile rendering
 
 ### Existing reusable path

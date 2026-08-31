@@ -1,5 +1,7 @@
 #include "studio/newmapfromimagedialog.h"
 
+#include "map.h"
+#include "maplayout.h"
 #include "metatile.h"
 #include "project.h"
 #include "tileset.h"
@@ -17,6 +19,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPixmap>
 #include <QPushButton>
@@ -59,6 +62,8 @@ NewMapFromImageDialog::NewMapFromImageDialog(
     auto *configurationGroup = new QGroupBox(QStringLiteral("Map Configuration"), this);
     auto *configurationLayout = new QFormLayout(configurationGroup);
     m_mapName = new QLineEdit(configurationGroup);
+    m_mapGroup = new QComboBox(configurationGroup);
+    m_mapGroup->setEditable(true);
     m_primaryTileset = new QComboBox(configurationGroup);
     m_secondaryTileset = new QComboBox(configurationGroup);
     m_autoDimensions = new QCheckBox(QStringLiteral("Automatically detect dimensions"), configurationGroup);
@@ -72,6 +77,7 @@ NewMapFromImageDialog::NewMapFromImageDialog(
     m_mapWidth->setSuffix(QStringLiteral(" blocks"));
     m_mapHeight->setSuffix(QStringLiteral(" blocks"));
     configurationLayout->addRow(QStringLiteral("Map Name:"), m_mapName);
+    configurationLayout->addRow(QStringLiteral("Map Group:"), m_mapGroup);
     configurationLayout->addRow(QStringLiteral("Primary Tileset:"), m_primaryTileset);
     configurationLayout->addRow(QStringLiteral("Secondary Tileset:"), m_secondaryTileset);
     configurationLayout->addRow(QString(), m_autoDimensions);
@@ -80,6 +86,8 @@ NewMapFromImageDialog::NewMapFromImageDialog(
     mainLayout->addWidget(configurationGroup);
 
     if (m_project) {
+        m_mapGroup->addItems(m_project->groupNames);
+        m_mapGroup->setCurrentText(m_project->newMapSettings.group);
         m_primaryTileset->addItems(m_project->primaryTilesetLabels);
         m_secondaryTileset->addItems(m_project->secondaryTilesetLabels);
         m_primaryTileset->setCurrentText(m_project->getDefaultPrimaryTilesetLabel());
@@ -135,6 +143,8 @@ NewMapFromImageDialog::NewMapFromImageDialog(
 
     auto *buttonBox = new QDialogButtonBox(QDialogButtonBox::Close, this);
     m_analyzeButton = buttonBox->addButton(QStringLiteral("Run Analysis"), QDialogButtonBox::ActionRole);
+    m_createMapButton = buttonBox->addButton(QStringLiteral("Create Map"), QDialogButtonBox::AcceptRole);
+    m_createMapButton->setEnabled(false);
     m_reviewUnmatchedButton = buttonBox->addButton(QStringLiteral("Review Unmatched"), QDialogButtonBox::ActionRole);
     m_reviewUnmatchedButton->setEnabled(false);
 #ifndef QT_NO_DEBUG
@@ -145,6 +155,7 @@ NewMapFromImageDialog::NewMapFromImageDialog(
 
     connect(browseButton, &QPushButton::clicked, this, &NewMapFromImageDialog::browseForImage);
     connect(m_analyzeButton, &QPushButton::clicked, this, &NewMapFromImageDialog::runAnalysis);
+    connect(m_createMapButton, &QPushButton::clicked, this, &NewMapFromImageDialog::createMapFromMatch);
     connect(m_reviewUnmatchedButton, &QPushButton::clicked, this, &NewMapFromImageDialog::reviewUnmatched);
     connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
     connect(m_autoDimensions, &QCheckBox::toggled, this, [this] {
@@ -283,6 +294,7 @@ void NewMapFromImageDialog::resetAnalysis(const QString &message)
     m_differencePreviewLabel->clear();
     m_differencePreviewLabel->setText(QStringLiteral("Run analysis to preview unmatched cells."));
     m_reviewUnmatchedButton->setEnabled(false);
+    updateCreateButton();
 #ifndef QT_NO_DEBUG
     m_debugExportButton->setEnabled(false);
 #endif
@@ -389,9 +401,174 @@ void NewMapFromImageDialog::runAnalysis()
     m_analysisSummary->setPlainText(summary);
     updatePreview();
     m_reviewUnmatchedButton->setEnabled(m_matchResult.unmatchedCount > 0);
+    updateCreateButton();
 #ifndef QT_NO_DEBUG
     m_debugExportButton->setEnabled(!m_renderResult.metatiles.isEmpty());
 #endif
+}
+
+void NewMapFromImageDialog::createMapFromMatch()
+{
+    if (!m_project) {
+        QMessageBox::warning(this, QStringLiteral("Cannot Create Map"), QStringLiteral("No project is loaded."));
+        return;
+    }
+
+    // Rendering and matching are intentionally repeated at commit time so the
+    // map can never be created from stale tileset or rendering state.
+    runAnalysis();
+    if (!m_matchResult.isValid()
+        || m_matchResult.cells.isEmpty()
+        || m_matchResult.unmatchedCount != 0
+        || m_matchResult.exactMatchCount != m_matchResult.cells.count()) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("Cannot Create Map"),
+            QStringLiteral("Run analysis and resolve every unmatched cell before creating a map.")
+        );
+        updateCreateButton();
+        return;
+    }
+
+    const QString mapName = m_mapName->text().trimmed();
+    if (mapName.isEmpty()) {
+        QMessageBox::warning(this, QStringLiteral("Cannot Create Map"), QStringLiteral("Enter a map name."));
+        return;
+    }
+    if (!m_project->isValidNewIdentifier(mapName)) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("Cannot Create Map"),
+            QString("Map name '%1' must be a valid, unused identifier.").arg(mapName)
+        );
+        return;
+    }
+
+    const QString mapGroup = m_mapGroup->currentText().trimmed();
+    if (mapGroup.isEmpty()) {
+        QMessageBox::warning(this, QStringLiteral("Cannot Create Map"), QStringLiteral("Select or enter a map group."));
+        return;
+    }
+    if (!m_project->groupNames.contains(mapGroup) && !m_project->isValidNewIdentifier(mapGroup)) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("Cannot Create Map"),
+            QString("Map group '%1' must be an existing group or a valid, unused identifier.").arg(mapGroup)
+        );
+        return;
+    }
+
+    const QSize mapSize(m_mapWidth->value(), m_mapHeight->value());
+    if (mapSize != m_matchResult.mapSize || !m_project->mapDimensionsValid(mapSize.width(), mapSize.height())) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("Cannot Create Map"),
+            QStringLiteral("The map dimensions no longer match the analyzed image. Run analysis again.")
+        );
+        resetAnalysis(QStringLiteral("Map dimensions changed. Run analysis again."));
+        return;
+    }
+
+    const QString primaryTilesetLabel = m_primaryTileset->currentText();
+    const QString secondaryTilesetLabel = m_secondaryTileset->currentText();
+    if (!m_project->getTileset(primaryTilesetLabel) || !m_project->getTileset(secondaryTilesetLabel)) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("Cannot Create Map"),
+            QStringLiteral("One or both selected tilesets are no longer available. Run analysis again.")
+        );
+        resetAnalysis(QStringLiteral("Selected tilesets changed. Run analysis again."));
+        return;
+    }
+
+    const QString layoutId = Layout::layoutConstantFromName(mapName);
+    if (!m_project->isValidNewIdentifier(layoutId)) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("Cannot Create Map"),
+            QString("Layout ID '%1' is already in use or invalid. Choose another map name.").arg(layoutId)
+        );
+        return;
+    }
+
+    Blockdata importedBlockdata;
+    importedBlockdata.resize(mapSize.width() * mapSize.height());
+    QList<bool> populated(importedBlockdata.count(), false);
+    for (const auto &cell : m_matchResult.cells) {
+        if (!cell.matched || cell.position.x() < 0 || cell.position.x() >= mapSize.width()
+            || cell.position.y() < 0 || cell.position.y() >= mapSize.height()) {
+            QMessageBox::warning(
+                this,
+                QStringLiteral("Cannot Create Map"),
+                QStringLiteral("The match result contains an invalid cell. Run analysis again.")
+            );
+            resetAnalysis(QStringLiteral("Match results are no longer valid. Run analysis again."));
+            return;
+        }
+        const int index = cell.position.y() * mapSize.width() + cell.position.x();
+        if (populated.at(index)) {
+            QMessageBox::warning(
+                this,
+                QStringLiteral("Cannot Create Map"),
+                QStringLiteral("The match result contains duplicate cells. Run analysis again.")
+            );
+            resetAnalysis(QStringLiteral("Match results are no longer valid. Run analysis again."));
+            return;
+        }
+        importedBlockdata[index] = Block(cell.metatileId, 0, 0);
+        populated[index] = true;
+    }
+    if (populated.contains(false)) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("Cannot Create Map"),
+            QStringLiteral("The match result does not cover the complete map. Run analysis again.")
+        );
+        resetAnalysis(QStringLiteral("Match results are incomplete. Run analysis again."));
+        return;
+    }
+
+    const auto confirmation = QMessageBox::question(
+        this,
+        QStringLiteral("Create Map From Image"),
+        QString(
+            "Create map '%1' in group '%2' using %3 × %4 exact metatile matches?\n\n"
+            "Collision and elevation will use their default values. No project files will be written until you save."
+        ).arg(mapName)
+         .arg(mapGroup)
+         .arg(mapSize.width())
+         .arg(mapSize.height()),
+        QMessageBox::Yes | QMessageBox::Cancel,
+        QMessageBox::Cancel
+    );
+    if (confirmation != QMessageBox::Yes) {
+        return;
+    }
+
+    Project::NewMapSettings settings = m_project->newMapSettings;
+    settings.name = mapName;
+    settings.group = mapGroup;
+    settings.canFlyTo = false;
+    settings.layout.id = layoutId;
+    settings.layout.name = m_project->toUniqueIdentifier(mapName + QStringLiteral("_Layout"));
+    settings.layout.folderName = mapName;
+    settings.layout.width = mapSize.width();
+    settings.layout.height = mapSize.height();
+    settings.layout.primaryTilesetLabel = primaryTilesetLabel;
+    settings.layout.secondaryTilesetLabel = secondaryTilesetLabel;
+
+    Map *map = m_project->createNewMap(settings, importedBlockdata);
+    if (!map) {
+        QMessageBox::critical(
+            this,
+            QStringLiteral("Map Creation Failed"),
+            QStringLiteral("Porymap could not create the map. Check the application log for details.")
+        );
+        return;
+    }
+
+    m_project->newMapSettings = settings;
+    QDialog::accept();
 }
 
 void NewMapFromImageDialog::reviewUnmatched()
@@ -468,6 +645,15 @@ void NewMapFromImageDialog::updateDimensionControls()
     const bool automatic = m_autoDimensions->isChecked();
     m_mapWidth->setEnabled(!automatic);
     m_mapHeight->setEnabled(!automatic);
+}
+
+void NewMapFromImageDialog::updateCreateButton()
+{
+    const bool completeExactMatch = m_matchResult.isValid()
+        && !m_matchResult.cells.isEmpty()
+        && m_matchResult.unmatchedCount == 0
+        && m_matchResult.exactMatchCount == m_matchResult.cells.count();
+    m_createMapButton->setEnabled(completeExactMatch);
 }
 
 } // namespace Studio

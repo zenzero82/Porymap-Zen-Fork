@@ -138,7 +138,9 @@ public:
     void initNewLayoutSettings();
 
     Map *createNewMap(const Project::NewMapSettings &mapSettings, const Map* toDuplicate = nullptr);
-    Layout *createNewLayout(const Layout::Settings &layoutSettings, const Layout* toDuplicate = nullptr);
+    Map *createNewMap(const Project::NewMapSettings &mapSettings, const Blockdata &initialBlockdata);
+    Layout *createNewLayout(const Layout::Settings &layoutSettings, const Layout* toDuplicate = nullptr,
+                            bool emitCreatedSignal = true);
     Tileset *createNewTileset(QString name, bool secondary, bool checkerboardFill);
     bool isIdentifierUnique(const QString &identifier) const;
     bool isValidNewIdentifier(const QString &identifier) const;
@@ -276,6 +278,8 @@ public:
     static QString getMapGroupPrefix();
 
 private:
+    Map *createNewMapInternal(const Project::NewMapSettings &settings, const Map *toDuplicate,
+                              const Blockdata *initialBlockdata);
     QPointer<QFileSystemWatcher> fileWatcher;
     QMap<QString, qint64> modifiedFileTimestamps;
     QMap<QString, QString> facingDirections;
