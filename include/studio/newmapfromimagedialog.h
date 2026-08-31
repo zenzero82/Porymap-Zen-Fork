@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QDialog>
+#include <QHash>
 
 #include "studio/imagemetatilematcher.h"
 #include "studio/mapimageanalyzer.h"
@@ -42,6 +43,18 @@ private:
     MetatileRenderService::Result m_renderResult;
     ImageMetatileMatcher m_matcher;
     ImageMetatileMatcher::Result m_matchResult;
+    QImage m_analysisReconstructedImage;
+    QImage m_analysisDifferenceImage;
+
+    struct Correction
+    {
+        ImageMetatileMatcher::CandidateResult candidate;
+        QImage sourceImage;
+        QImage renderedImage;
+        bool approved = false;
+    };
+
+    QHash<int, Correction> m_corrections;
 
     QLineEdit *m_imagePath = nullptr;
     QLabel *m_imageDimensions = nullptr;
@@ -83,6 +96,14 @@ private:
     void exportDebugMetatiles();
     void updateDimensionControls();
     void updateCreateButton();
+    int cellIndex(const ImageMetatileMatcher::CellResult &cell) const;
+    const MetatileRenderService::RenderedMetatile *findRenderedCandidate(
+        const ImageMetatileMatcher::CandidateResult &candidate) const;
+    bool isCorrectionValid(
+        const ImageMetatileMatcher::CellResult &cell,
+        const Correction &correction) const;
+    bool allCellsResolved() const;
+    void updateCorrectionPreviews();
 };
 
 } // namespace Studio

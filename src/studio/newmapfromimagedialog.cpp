@@ -6,6 +6,7 @@
 #include "project.h"
 #include "tileset.h"
 
+#include <QAbstractItemView>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -24,6 +25,7 @@
 #include <QPixmap>
 #include <QPushButton>
 #include <QProgressDialog>
+#include <QSignalBlocker>
 #include <QScrollArea>
 #include <QSpinBox>
 #include <QTabWidget>
@@ -167,7 +169,7 @@ NewMapFromImageDialog::NewMapFromImageDialog(
     m_fuzzyMatchButton->setEnabled(false);
     m_createMapButton = buttonBox->addButton(QStringLiteral("Create Map"), QDialogButtonBox::AcceptRole);
     m_createMapButton->setEnabled(false);
-    m_reviewUnmatchedButton = buttonBox->addButton(QStringLiteral("Review Unmatched"), QDialogButtonBox::ActionRole);
+    m_reviewUnmatchedButton = buttonBox->addButton(QStringLiteral("Review Corrections"), QDialogButtonBox::ActionRole);
     m_reviewUnmatchedButton->setEnabled(false);
 #ifndef QT_NO_DEBUG
     m_debugExportButton = buttonBox->addButton(QStringLiteral("Export Debug Metatiles..."), QDialogButtonBox::ActionRole);
@@ -318,6 +320,9 @@ void NewMapFromImageDialog::resetAnalysis(const QString &message)
     }
     m_renderResult = {};
     m_matchResult = {};
+    m_analysisReconstructedImage = {};
+    m_analysisDifferenceImage = {};
+    m_corrections.clear();
     m_reconstructedPreviewLabel->clear();
     m_reconstructedPreviewLabel->setText(QStringLiteral("Run analysis to preview the reconstruction."));
     m_differencePreviewLabel->clear();
@@ -396,6 +401,8 @@ void NewMapFromImageDialog::runAnalysis()
         return;
     }
 
+    m_analysisReconstructedImage = m_matchResult.reconstructedImage;
+    m_analysisDifferenceImage = m_matchResult.differenceImage;
     updateMatchDisplay();
 }
 
@@ -442,17 +449,42 @@ void NewMapFromImageDialog::runFuzzyMatching()
     }
     progress.setValue(progress.maximum());
 
+    m_analysisReconstructedImage = m_matchResult.reconstructedImage;
+    m_analysisDifferenceImage = m_matchResult.differenceImage;
     updateMatchDisplay();
 }
 
 void NewMapFromImageDialog::updateMatchDisplay()
 {
+    updateCorrectionPreviews();
     const int cellCount = m_matchResult.cells.count();
+    int approvedCorrections = 0;
+    int editedCorrections = 0;
+    for (const auto &cell : m_matchResult.cells) {
+        if (cell.matched) {
+            continue;
+        }
+        const auto correctionIt = m_corrections.constFind(cellIndex(cell));
+        if (correctionIt == m_corrections.cend()) {
+            continue;
+        }
+        if (correctionIt.value().approved && isCorrectionValid(cell, correctionIt.value())) {
+            approvedCorrections++;
+        } else {
+            editedCorrections++;
+        }
+    }
     const double matchPercentage = cellCount == 0
         ? 0.0
         : (100.0 * m_matchResult.exactMatchCount) / cellCount;
     QString fuzzySummary;
     QString status;
+    if (allCellsResolved() && m_matchResult.unmatchedCount > 0) {
+        status = QStringLiteral(
+            "CORRECTIONS APPROVED\n"
+            "Every non-exact cell has an explicit, validated correction."
+        );
+    }
     if (m_matchResult.usedFuzzyMatching) {
         fuzzySummary = QString(
             "Fuzzy Accepted:\n"
@@ -461,20 +493,28 @@ void NewMapFromImageDialog::updateMatchDisplay()
             "%2\n\n"
             "Fuzzy Rejected:\n"
             "%3\n\n"
+            "Approved Corrections:\n"
+            "%4\n\n"
+            "Edited Corrections:\n"
+            "%5\n\n"
             "Thresholds:\n"
-            "distance ≤ %4%, confidence ≥ %5%\n\n"
+            "distance ≤ %6%, confidence ≥ %7%\n\n"
         ).arg(m_matchResult.fuzzyAcceptedCount)
          .arg(m_matchResult.fuzzyUncertainCount)
          .arg(m_matchResult.fuzzyRejectedCount)
+         .arg(approvedCorrections)
+         .arg(editedCorrections)
          .arg(m_maxFuzzyDistance->value())
          .arg(m_minFuzzyConfidence->value());
-        status = QStringLiteral(
-            "FUZZY SUGGESTIONS READY\n"
-            "Suggestions are not approved for map creation. Review them before a future correction step."
-        );
+        if (status.isEmpty()) {
+            status = QStringLiteral(
+                "FUZZY SUGGESTIONS READY\n"
+                "Review every non-exact cell and explicitly approve a candidate."
+            );
+        }
     } else if (m_matchResult.unmatchedCount == 0) {
         status = QStringLiteral("EXACT RECONSTRUCTION READY");
-    } else {
+    } else if (status.isEmpty()) {
         status = QString("%1 cells require attention; fuzzy matching is available.")
             .arg(m_matchResult.unmatchedCount);
     }
@@ -527,16 +567,29 @@ void NewMapFromImageDialog::createMapFromMatch()
     }
 
     // Rendering and matching are intentionally repeated at commit time so the
-    // map can never be created from stale tileset or rendering state.
+    // map can never be created from stale tileset or rendering state. Keep the
+    // explicit corrections so they can be validated against the fresh result.
+    const auto corrections = m_corrections;
     runAnalysis();
+    m_corrections = corrections;
+    if (m_matchResult.isValid()) {
+        updateMatchDisplay();
+    }
     if (!m_matchResult.isValid()
-        || m_matchResult.cells.isEmpty()
-        || m_matchResult.unmatchedCount != 0
-        || m_matchResult.exactMatchCount != m_matchResult.cells.count()) {
+        || m_matchResult.cells.isEmpty()) {
         QMessageBox::warning(
             this,
             QStringLiteral("Cannot Create Map"),
             QStringLiteral("Run analysis and resolve every unmatched cell before creating a map.")
+        );
+        updateCreateButton();
+        return;
+    }
+    if (!allCellsResolved()) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("Cannot Create Map"),
+            QStringLiteral("Approve a candidate for every non-exact cell before creating the map.")
         );
         updateCreateButton();
         return;
@@ -606,8 +659,9 @@ void NewMapFromImageDialog::createMapFromMatch()
     Blockdata importedBlockdata;
     importedBlockdata.resize(mapSize.width() * mapSize.height());
     QList<bool> populated(importedBlockdata.count(), false);
+    int approvedCorrectionCount = 0;
     for (const auto &cell : m_matchResult.cells) {
-        if (!cell.matched || cell.position.x() < 0 || cell.position.x() >= mapSize.width()
+        if (cell.position.x() < 0 || cell.position.x() >= mapSize.width()
             || cell.position.y() < 0 || cell.position.y() >= mapSize.height()) {
             QMessageBox::warning(
                 this,
@@ -627,7 +681,24 @@ void NewMapFromImageDialog::createMapFromMatch()
             resetAnalysis(QStringLiteral("Match results are no longer valid. Run analysis again."));
             return;
         }
-        importedBlockdata[index] = Block(cell.metatileId, 0, 0);
+        if (cell.matched) {
+            importedBlockdata[index] = Block(cell.metatileId, 0, 0);
+        } else {
+            const auto correctionIt = m_corrections.constFind(index);
+            if (correctionIt == m_corrections.cend()
+                || !correctionIt.value().approved
+                || !isCorrectionValid(cell, correctionIt.value())) {
+                QMessageBox::warning(
+                    this,
+                    QStringLiteral("Cannot Create Map"),
+                    QStringLiteral("A correction is stale or incomplete. Review the fuzzy suggestions again.")
+                );
+                resetAnalysis(QStringLiteral("Corrections changed. Review fuzzy suggestions again."));
+                return;
+            }
+            importedBlockdata[index] = Block(correctionIt.value().candidate.metatileId, 0, 0);
+            approvedCorrectionCount++;
+        }
         populated[index] = true;
     }
     if (populated.contains(false)) {
@@ -644,12 +715,14 @@ void NewMapFromImageDialog::createMapFromMatch()
         this,
         QStringLiteral("Create Map From Image"),
         QString(
-            "Create map '%1' in group '%2' using %3 × %4 exact metatile matches?\n\n"
+            "Create map '%1' in group '%2' using %3 × %4 cells (%5 exact matches, %6 approved corrections)?\n\n"
             "Collision and elevation will use their default values. No project files will be written until you save."
         ).arg(mapName)
          .arg(mapGroup)
          .arg(mapSize.width())
-         .arg(mapSize.height()),
+         .arg(mapSize.height())
+         .arg(m_matchResult.exactMatchCount)
+         .arg(approvedCorrectionCount),
         QMessageBox::Yes | QMessageBox::Cancel,
         QMessageBox::Cancel
     );
@@ -690,113 +763,242 @@ void NewMapFromImageDialog::reviewUnmatched()
     }
 
     QDialog reviewDialog(this);
-    reviewDialog.setWindowTitle(QStringLiteral("Review Unmatched Cells"));
-    reviewDialog.setMinimumSize(520, 360);
+    reviewDialog.setWindowTitle(QStringLiteral("Review Fuzzy Corrections"));
+    reviewDialog.setMinimumSize(900, 520);
     auto *layout = new QHBoxLayout(&reviewDialog);
     auto *cellList = new QListWidget(&reviewDialog);
-    auto *previewLabel = new QLabel(&reviewDialog);
-    previewLabel->setAlignment(Qt::AlignCenter);
-    previewLabel->setMinimumSize(180, 180);
+    auto *sourcePreviewLabel = new QLabel(&reviewDialog);
+    sourcePreviewLabel->setAlignment(Qt::AlignCenter);
+    sourcePreviewLabel->setMinimumSize(180, 180);
+    auto *candidatePreviewLabel = new QLabel(&reviewDialog);
+    candidatePreviewLabel->setAlignment(Qt::AlignCenter);
+    candidatePreviewLabel->setMinimumSize(180, 180);
+    auto *candidateList = new QListWidget(&reviewDialog);
+    candidateList->setSelectionMode(QAbstractItemView::SingleSelection);
     auto *detailsLabel = new QLabel(&reviewDialog);
     detailsLabel->setAlignment(Qt::AlignTop | Qt::AlignLeft);
     detailsLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
     detailsLabel->setWordWrap(true);
-    detailsLabel->setMinimumWidth(260);
+    auto *approveButton = new QPushButton(QStringLiteral("Approve Selected"), &reviewDialog);
+    auto *clearButton = new QPushButton(QStringLiteral("Clear Correction"), &reviewDialog);
+    approveButton->setEnabled(false);
+    clearButton->setEnabled(false);
 
-    QList<const ImageMetatileMatcher::CellResult *> unmatchedCells;
-    for (const auto &cell : m_matchResult.cells) {
+    QList<int> unmatchedCellIndices;
+    for (int index = 0; index < m_matchResult.cells.count(); index++) {
+        const auto &cell = m_matchResult.cells.at(index);
         if (!cell.matched) {
-            unmatchedCells.append(&cell);
-            QString outcome = QStringLiteral("No exact match");
-            if (m_matchResult.usedFuzzyMatching) {
-                switch (cell.status) {
-                case ImageMetatileMatcher::MatchStatus::FuzzyAccepted:
-                    outcome = QStringLiteral("Accepted suggestion");
-                    break;
-                case ImageMetatileMatcher::MatchStatus::FuzzyUncertain:
-                    outcome = QStringLiteral("Uncertain suggestion");
-                    break;
-                case ImageMetatileMatcher::MatchStatus::FuzzyRejected:
-                    outcome = QStringLiteral("Rejected");
-                    break;
-                default:
-                    break;
-                }
-            }
-            cellList->addItem(QString("Column %1, Row %2 — %3")
-                .arg(cell.position.x())
-                .arg(cell.position.y())
-                .arg(outcome));
+            unmatchedCellIndices.append(index);
+            cellList->addItem(QString());
         }
     }
 
     layout->addWidget(cellList, 2);
+    auto *sourceLayout = new QVBoxLayout();
+    sourceLayout->addWidget(new QLabel(QStringLiteral("Source Cell"), &reviewDialog));
+    sourceLayout->addWidget(sourcePreviewLabel);
+    layout->addLayout(sourceLayout, 1);
+    auto *candidateLayout = new QVBoxLayout();
+    candidateLayout->addWidget(new QLabel(QStringLiteral("Candidate Preview"), &reviewDialog));
+    candidateLayout->addWidget(candidatePreviewLabel);
+    candidateLayout->addWidget(candidateList, 1);
+    candidateLayout->addWidget(approveButton);
+    candidateLayout->addWidget(clearButton);
+    layout->addLayout(candidateLayout, 2);
     auto *detailsLayout = new QVBoxLayout();
-    detailsLayout->addWidget(previewLabel);
     detailsLayout->addWidget(detailsLabel, 1);
     layout->addLayout(detailsLayout, 2);
+
+    const auto statusForCell = [this](int index) {
+        const auto &cell = m_matchResult.cells.at(index);
+        const auto correctionIt = m_corrections.constFind(index);
+        if (correctionIt != m_corrections.cend()) {
+            if (!correctionIt.value().approved) {
+                return QStringLiteral("Edited");
+            }
+            return isCorrectionValid(cell, correctionIt.value())
+                ? QStringLiteral("Approved")
+                : QStringLiteral("Stale");
+        }
+        switch (cell.status) {
+        case ImageMetatileMatcher::MatchStatus::FuzzyAccepted:
+            return QStringLiteral("Accepted suggestion");
+        case ImageMetatileMatcher::MatchStatus::FuzzyUncertain:
+            return QStringLiteral("Uncertain suggestion");
+        case ImageMetatileMatcher::MatchStatus::FuzzyRejected:
+            return QStringLiteral("Rejected");
+        default:
+            return QStringLiteral("Unresolved");
+        }
+    };
+    const auto updateCellListItem = [&, statusForCell](int index) {
+        const auto &cell = m_matchResult.cells.at(index);
+        const int row = unmatchedCellIndices.indexOf(index);
+        if (row >= 0) {
+            cellList->item(row)->setText(QString("Column %1, Row %2 — %3")
+                .arg(cell.position.x())
+                .arg(cell.position.y())
+                .arg(statusForCell(index)));
+        }
+    };
+    const auto candidateMatches = [](const ImageMetatileMatcher::CandidateResult &left,
+                                     const ImageMetatileMatcher::CandidateResult &right) {
+        return left.metatileId == right.metatileId
+            && left.sourceTileset == right.sourceTileset
+            && left.sourceTilesetName == right.sourceTilesetName;
+    };
+    const auto scaledPixmap = [](const QImage &image) {
+        return QPixmap::fromImage(image.scaled(
+            180,
+            180,
+            Qt::KeepAspectRatio,
+            Qt::FastTransformation
+        ));
+    };
+    const auto updateDetails = [&, statusForCell, candidateMatches](int index, int candidateRow) {
+        if (index < 0 || index >= m_matchResult.cells.count()) {
+            return;
+        }
+        const auto &cell = m_matchResult.cells.at(index);
+        sourcePreviewLabel->setPixmap(scaledPixmap(cell.sourceImage));
+        const auto correctionIt = m_corrections.constFind(index);
+        const bool hasCorrection = correctionIt != m_corrections.cend();
+        approveButton->setEnabled(candidateRow >= 0 && candidateRow < cell.rankedCandidates.count());
+        clearButton->setEnabled(hasCorrection);
+
+        QString details = QString("Status: %1").arg(statusForCell(index));
+        if (candidateRow >= 0 && candidateRow < cell.rankedCandidates.count()) {
+            const auto &candidate = cell.rankedCandidates.at(candidateRow);
+            const auto *rendered = findRenderedCandidate(candidate);
+            if (rendered) {
+                candidatePreviewLabel->setPixmap(scaledPixmap(rendered->image));
+            } else {
+                candidatePreviewLabel->clear();
+            }
+            details.append(QString(
+                "\n\nSelected candidate: %1\nTileset: %2\nMetatile ID: 0x%3\nDistance: %4%"
+            ).arg(candidate.sourceTilesetName)
+             .arg(candidate.sourceTileset == MetatileRenderService::SourceTileset::Primary
+                 ? QStringLiteral("primary")
+                 : QStringLiteral("secondary"))
+             .arg(candidate.metatileId, 4, 16, QLatin1Char('0'))
+             .arg(QString::number(candidate.distance * 100.0, 'f', 2)));
+        } else {
+            candidatePreviewLabel->setText(QStringLiteral("No ranked candidate selected."));
+        }
+        if (!cell.rankedCandidates.isEmpty()) {
+            details.append(QString(
+                "\n\nBest distance: %1%\nConfidence: %2%"
+            ).arg(QString::number(cell.bestDistance * 100.0, 'f', 2))
+             .arg(QString::number(cell.confidence * 100.0, 'f', 1)));
+        }
+        detailsLabel->setText(details);
+    };
+
+    const auto populateCandidates = [&, candidateMatches, updateDetails](int row) {
+        if (row < 0 || row >= unmatchedCellIndices.count()) {
+            return;
+        }
+        const int index = unmatchedCellIndices.at(row);
+        const auto &cell = m_matchResult.cells.at(index);
+        const QSignalBlocker blocker(candidateList);
+        candidateList->clear();
+        int selectedRow = cell.rankedCandidates.isEmpty() ? -1 : 0;
+        const auto correctionIt = m_corrections.constFind(index);
+        for (int candidateIndex = 0; candidateIndex < cell.rankedCandidates.count(); candidateIndex++) {
+            const auto &candidate = cell.rankedCandidates.at(candidateIndex);
+            if (correctionIt != m_corrections.cend()
+                && candidateMatches(candidate, correctionIt.value().candidate)) {
+                selectedRow = candidateIndex;
+            }
+            candidateList->addItem(QString("%1. %2 — ID 0x%3 — distance %4%")
+                .arg(candidateIndex + 1)
+                .arg(candidate.sourceTilesetName)
+                .arg(candidate.metatileId, 4, 16, QLatin1Char('0'))
+                .arg(QString::number(candidate.distance * 100.0, 'f', 2)));
+        }
+        if (selectedRow >= 0) {
+            candidateList->setCurrentRow(selectedRow);
+        }
+        updateDetails(index, selectedRow);
+    };
+
+    for (int index : unmatchedCellIndices) {
+        updateCellListItem(index);
+    }
     connect(
         cellList,
         &QListWidget::currentRowChanged,
         &reviewDialog,
-        [previewLabel, detailsLabel, unmatchedCells](int row) {
-        if (row < 0 || row >= unmatchedCells.count()) {
-            previewLabel->clear();
-            detailsLabel->clear();
+        [populateCandidates](int row) {
+        if (row < 0) {
             return;
         }
-        const auto *cell = unmatchedCells.at(row);
-        previewLabel->setPixmap(QPixmap::fromImage(cell->sourceImage.scaled(
-            160,
-            160,
-            Qt::KeepAspectRatio,
-            Qt::FastTransformation
-        )));
-
-        QString outcome = QStringLiteral("No exact match.");
-        switch (cell->status) {
-        case ImageMetatileMatcher::MatchStatus::FuzzyAccepted:
-            outcome = QStringLiteral("Accepted by the current thresholds, but not approved for map creation.");
-            break;
-        case ImageMetatileMatcher::MatchStatus::FuzzyUncertain:
-            outcome = QStringLiteral("Within the distance threshold, but below minimum confidence.");
-            break;
-        case ImageMetatileMatcher::MatchStatus::FuzzyRejected:
-            outcome = cell->rankedCandidates.isEmpty()
-                ? QStringLiteral("No exact match. Run fuzzy matching to rank alternatives.")
-                : QStringLiteral("The closest candidate exceeds the distance threshold.");
-            break;
-        default:
-            break;
+        populateCandidates(row);
+    });
+    connect(candidateList, &QListWidget::currentRowChanged, &reviewDialog, [&](int candidateRow) {
+        const int cellRow = cellList->currentRow();
+        if (cellRow < 0 || candidateRow < 0 || cellRow >= unmatchedCellIndices.count()) {
+            return;
         }
-
-        QString details = outcome;
-        if (!cell->rankedCandidates.isEmpty()) {
-            details.append(QString(
-                "\n\nBest distance: %1%\nConfidence: %2%"
-            ).arg(QString::number(cell->bestDistance * 100.0, 'f', 2))
-             .arg(QString::number(cell->confidence * 100.0, 'f', 1)));
-            details.append(QStringLiteral("\n\nRanked candidates:"));
-            for (int index = 0; index < cell->rankedCandidates.count(); index++) {
-                const auto &candidate = cell->rankedCandidates.at(index);
-                const QString owner = candidate.sourceTileset
-                        == MetatileRenderService::SourceTileset::Primary
-                    ? QStringLiteral("primary")
-                    : QStringLiteral("secondary");
-                details.append(QString(
-                    "\n%1. %2 (%3, ID 0x%4) — distance %5%"
-                ).arg(index + 1)
-                 .arg(candidate.sourceTilesetName)
-                 .arg(owner)
-                 .arg(candidate.metatileId, 4, 16, QLatin1Char('0'))
-                 .arg(QString::number(candidate.distance * 100.0, 'f', 2)));
-            }
+        const int index = unmatchedCellIndices.at(cellRow);
+        const auto &cell = m_matchResult.cells.at(index);
+        const auto &candidate = cell.rankedCandidates.at(candidateRow);
+        const auto *rendered = findRenderedCandidate(candidate);
+        if (!rendered) {
+            return;
         }
-        detailsLabel->setText(details);
+        Correction correction;
+        correction.candidate = candidate;
+        correction.sourceImage = cell.sourceImage;
+        correction.renderedImage = rendered->image;
+        correction.approved = false;
+        m_corrections.insert(index, correction);
+        updateCellListItem(index);
+        updateDetails(index, candidateRow);
+    });
+    connect(approveButton, &QPushButton::clicked, &reviewDialog, [&] {
+        const int cellRow = cellList->currentRow();
+        const int candidateRow = candidateList->currentRow();
+        if (cellRow < 0 || candidateRow < 0 || cellRow >= unmatchedCellIndices.count()) {
+            return;
+        }
+        const int index = unmatchedCellIndices.at(cellRow);
+        const auto &cell = m_matchResult.cells.at(index);
+        if (candidateRow >= cell.rankedCandidates.count()) {
+            return;
+        }
+        const auto &candidate = cell.rankedCandidates.at(candidateRow);
+        const auto *rendered = findRenderedCandidate(candidate);
+        if (!rendered) {
+            return;
+        }
+        Correction correction;
+        correction.candidate = candidate;
+        correction.sourceImage = cell.sourceImage;
+        correction.renderedImage = rendered->image;
+        correction.approved = true;
+        m_corrections.insert(index, correction);
+        auto correctionIt = m_corrections.find(index);
+        correctionIt.value().approved = true;
+        updateCellListItem(index);
+        updateDetails(index, candidateRow);
+    });
+    connect(clearButton, &QPushButton::clicked, &reviewDialog, [&] {
+        const int cellRow = cellList->currentRow();
+        if (cellRow < 0 || cellRow >= unmatchedCellIndices.count()) {
+            return;
+        }
+        const int index = unmatchedCellIndices.at(cellRow);
+        m_corrections.remove(index);
+        updateCellListItem(index);
+        const int candidateRow = candidateList->currentRow();
+        updateDetails(index, candidateRow);
     });
 
     cellList->setCurrentRow(0);
     reviewDialog.exec();
+    updateMatchDisplay();
 }
 
 void NewMapFromImageDialog::exportDebugMetatiles()
@@ -833,11 +1035,95 @@ void NewMapFromImageDialog::updateDimensionControls()
 
 void NewMapFromImageDialog::updateCreateButton()
 {
-    const bool completeExactMatch = m_matchResult.isValid()
-        && !m_matchResult.cells.isEmpty()
-        && m_matchResult.unmatchedCount == 0
-        && m_matchResult.exactMatchCount == m_matchResult.cells.count();
-    m_createMapButton->setEnabled(completeExactMatch);
+    m_createMapButton->setEnabled(allCellsResolved());
+}
+
+int NewMapFromImageDialog::cellIndex(const ImageMetatileMatcher::CellResult &cell) const
+{
+    return cell.position.y() * m_matchResult.mapSize.width() + cell.position.x();
+}
+
+const MetatileRenderService::RenderedMetatile *NewMapFromImageDialog::findRenderedCandidate(
+    const ImageMetatileMatcher::CandidateResult &candidate) const
+{
+    for (const auto &rendered : m_renderResult.metatiles) {
+        if (rendered.metatileId == candidate.metatileId
+            && rendered.source == candidate.sourceTileset
+            && rendered.sourceTilesetName == candidate.sourceTilesetName) {
+            return &rendered;
+        }
+    }
+    return nullptr;
+}
+
+bool NewMapFromImageDialog::isCorrectionValid(
+    const ImageMetatileMatcher::CellResult &cell,
+    const Correction &correction) const
+{
+    if (!correction.approved || correction.sourceImage != cell.sourceImage) {
+        return false;
+    }
+    const auto *rendered = findRenderedCandidate(correction.candidate);
+    return rendered && rendered->image == correction.renderedImage;
+}
+
+bool NewMapFromImageDialog::allCellsResolved() const
+{
+    if (!m_matchResult.isValid() || m_matchResult.cells.isEmpty()) {
+        return false;
+    }
+    for (const auto &cell : m_matchResult.cells) {
+        if (cell.matched) {
+            continue;
+        }
+        const auto correctionIt = m_corrections.constFind(cellIndex(cell));
+        if (correctionIt == m_corrections.cend()
+            || !isCorrectionValid(cell, correctionIt.value())) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void NewMapFromImageDialog::updateCorrectionPreviews()
+{
+    if (m_analysisReconstructedImage.isNull() || m_analysisDifferenceImage.isNull()) {
+        return;
+    }
+
+    m_matchResult.reconstructedImage = m_analysisReconstructedImage;
+    m_matchResult.differenceImage = m_analysisDifferenceImage;
+    QPainter reconstructedPainter(&m_matchResult.reconstructedImage);
+    reconstructedPainter.setCompositionMode(QPainter::CompositionMode_Source);
+    QPainter differencePainter(&m_matchResult.differenceImage);
+    for (const auto &cell : m_matchResult.cells) {
+        if (cell.matched) {
+            continue;
+        }
+        const auto correctionIt = m_corrections.constFind(cellIndex(cell));
+        if (correctionIt == m_corrections.cend()
+            || correctionIt.value().sourceImage != cell.sourceImage) {
+            continue;
+        }
+        const auto *rendered = findRenderedCandidate(correctionIt.value().candidate);
+        if (!rendered || rendered->image != correctionIt.value().renderedImage) {
+            continue;
+        }
+        const QRect cellRect(
+            cell.position.x() * cell.sourceImage.width(),
+            cell.position.y() * cell.sourceImage.height(),
+            cell.sourceImage.width(),
+            cell.sourceImage.height()
+        );
+        reconstructedPainter.drawImage(cellRect.topLeft(), rendered->image);
+        differencePainter.drawImage(cellRect.topLeft(), cell.sourceImage);
+        differencePainter.fillRect(
+            cellRect,
+            correctionIt.value().approved
+                ? QColor(24, 170, 90, 120)
+                : QColor(60, 120, 220, 150)
+        );
+    }
 }
 
 } // namespace Studio

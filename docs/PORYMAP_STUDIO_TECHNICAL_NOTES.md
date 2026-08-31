@@ -128,6 +128,28 @@ needed for confidence and display are partially sorted. The dialog also reports
 progress for every source cell and permits cancellation between cells, keeping
 large analyses observable and interruptible without changing ranking order.
 
+### Phase 5 correction and approval boundary
+
+Fuzzy classification and user approval are separate states. Selecting a ranked
+candidate marks that cell as edited; the user must explicitly approve the
+selection before it can contribute to map creation. Replacing a selection
+returns the cell to edited state, and clearing it makes the cell unresolved.
+
+Corrections live only in the dialog. Each correction retains the unchanged
+source-cell pixels, metatile identity, source tileset identity, and the rendered
+candidate image that the user reviewed. The reconstructed and difference
+previews overlay edited and approved alternatives so the visible proposal
+matches the blockdata that would be created.
+
+The Create Map action is enabled only when every non-exact cell has a validated
+approval. At commit time the dialog repeats PNG decoding, tileset rendering,
+dimension validation, and exact matching. An approval is accepted only when its
+source pixels, metatile identity, tileset ownership, and rendered candidate
+pixels still match the fresh analysis. Stale or incomplete approvals block map
+creation. Approved metatile IDs then flow through the existing in-memory
+`Blockdata` creation path; collision and elevation remain zero and no project
+files are written until Porymap's normal save action.
+
 #### Reproducible developer verification
 
 1. Build with `./scripts/replit-build.sh`.

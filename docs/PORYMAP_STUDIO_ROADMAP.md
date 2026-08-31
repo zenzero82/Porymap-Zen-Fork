@@ -52,6 +52,8 @@ compatible with future upstream merges.
 - Preview proposed layout results.
 - Highlight uncertain and unmatched cells.
 - Let users choose alternatives before committing.
+- Require an explicit approval for every non-exact cell.
+- Revalidate source pixels and rendered candidates before map creation.
 
 ## Milestone 6 — Generate Porymap layouts
 
