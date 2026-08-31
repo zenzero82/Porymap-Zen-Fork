@@ -43,6 +43,9 @@ compatible with future upstream merges.
 - Add measurable color/pixel distance.
 - Return ranked candidates and confidence scores.
 - Keep thresholds visible and deterministic.
+- Run fuzzy matching only as an explicit follow-up when exact matching leaves
+  unresolved cells.
+- Keep fuzzy suggestions separate from map-creation approval.
 
 ## Milestone 5 — Import preview and correction
 

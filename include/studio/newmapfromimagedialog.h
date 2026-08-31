@@ -59,8 +59,11 @@ private:
     QCheckBox *m_autoDimensions = nullptr;
     QSpinBox *m_mapWidth = nullptr;
     QSpinBox *m_mapHeight = nullptr;
+    QSpinBox *m_maxFuzzyDistance = nullptr;
+    QSpinBox *m_minFuzzyConfidence = nullptr;
     QPlainTextEdit *m_analysisSummary = nullptr;
     QPushButton *m_analyzeButton = nullptr;
+    QPushButton *m_fuzzyMatchButton = nullptr;
     QPushButton *m_createMapButton = nullptr;
     QPushButton *m_reviewUnmatchedButton = nullptr;
 #ifndef QT_NO_DEBUG
@@ -73,6 +76,8 @@ private:
     void updatePreviewForImage(const QImage &image, QScrollArea *scrollArea, QLabel *label);
     void resetAnalysis(const QString &message = QString());
     void runAnalysis();
+    void runFuzzyMatching();
+    void updateMatchDisplay();
     void createMapFromMatch();
     void reviewUnmatched();
     void exportDebugMetatiles();

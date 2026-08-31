@@ -61,3 +61,9 @@ find . -maxdepth 1 -type f -name '*.o' -size 0 -delete
 
 qmake porymap.pro
 make -j"${JOBS:-$(nproc)}"
+
+matcher_test_build_dir="build/tests/studio"
+mkdir -p "$matcher_test_build_dir"
+qmake tests/studio/imagemetatilematcher_test.pro -o "$matcher_test_build_dir/Makefile"
+make -C "$matcher_test_build_dir" -j"${JOBS:-$(nproc)}"
+"$matcher_test_build_dir/imagemetatilematcher_test"

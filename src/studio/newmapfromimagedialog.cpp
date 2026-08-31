@@ -23,6 +23,7 @@
 #include <QPlainTextEdit>
 #include <QPixmap>
 #include <QPushButton>
+#include <QProgressDialog>
 #include <QScrollArea>
 #include <QSpinBox>
 #include <QTabWidget>
@@ -70,12 +71,26 @@ NewMapFromImageDialog::NewMapFromImageDialog(
     m_autoDimensions->setChecked(true);
     m_mapWidth = new QSpinBox(configurationGroup);
     m_mapHeight = new QSpinBox(configurationGroup);
+    m_maxFuzzyDistance = new QSpinBox(configurationGroup);
+    m_minFuzzyConfidence = new QSpinBox(configurationGroup);
     const int maxWidth = m_project ? qMax(1, m_project->getMaxMapWidth()) : 9999;
     const int maxHeight = m_project ? qMax(1, m_project->getMaxMapHeight()) : 9999;
     m_mapWidth->setRange(1, maxWidth);
     m_mapHeight->setRange(1, maxHeight);
     m_mapWidth->setSuffix(QStringLiteral(" blocks"));
     m_mapHeight->setSuffix(QStringLiteral(" blocks"));
+    m_maxFuzzyDistance->setRange(0, 100);
+    m_maxFuzzyDistance->setValue(15);
+    m_maxFuzzyDistance->setSuffix(QStringLiteral("%"));
+    m_maxFuzzyDistance->setToolTip(QStringLiteral(
+        "Maximum normalized average RGBA channel difference for a fuzzy suggestion."
+    ));
+    m_minFuzzyConfidence->setRange(0, 100);
+    m_minFuzzyConfidence->setValue(50);
+    m_minFuzzyConfidence->setSuffix(QStringLiteral("%"));
+    m_minFuzzyConfidence->setToolTip(QStringLiteral(
+        "Minimum confidence required to classify the best candidate as accepted."
+    ));
     configurationLayout->addRow(QStringLiteral("Map Name:"), m_mapName);
     configurationLayout->addRow(QStringLiteral("Map Group:"), m_mapGroup);
     configurationLayout->addRow(QStringLiteral("Primary Tileset:"), m_primaryTileset);
@@ -83,6 +98,8 @@ NewMapFromImageDialog::NewMapFromImageDialog(
     configurationLayout->addRow(QString(), m_autoDimensions);
     configurationLayout->addRow(QStringLiteral("Map Width:"), m_mapWidth);
     configurationLayout->addRow(QStringLiteral("Map Height:"), m_mapHeight);
+    configurationLayout->addRow(QStringLiteral("Max Fuzzy Distance:"), m_maxFuzzyDistance);
+    configurationLayout->addRow(QStringLiteral("Minimum Confidence:"), m_minFuzzyConfidence);
     mainLayout->addWidget(configurationGroup);
 
     if (m_project) {
@@ -143,6 +160,11 @@ NewMapFromImageDialog::NewMapFromImageDialog(
 
     auto *buttonBox = new QDialogButtonBox(QDialogButtonBox::Close, this);
     m_analyzeButton = buttonBox->addButton(QStringLiteral("Run Analysis"), QDialogButtonBox::ActionRole);
+    m_fuzzyMatchButton = buttonBox->addButton(
+        QStringLiteral("Run Fuzzy Matching"),
+        QDialogButtonBox::ActionRole
+    );
+    m_fuzzyMatchButton->setEnabled(false);
     m_createMapButton = buttonBox->addButton(QStringLiteral("Create Map"), QDialogButtonBox::AcceptRole);
     m_createMapButton->setEnabled(false);
     m_reviewUnmatchedButton = buttonBox->addButton(QStringLiteral("Review Unmatched"), QDialogButtonBox::ActionRole);
@@ -155,6 +177,7 @@ NewMapFromImageDialog::NewMapFromImageDialog(
 
     connect(browseButton, &QPushButton::clicked, this, &NewMapFromImageDialog::browseForImage);
     connect(m_analyzeButton, &QPushButton::clicked, this, &NewMapFromImageDialog::runAnalysis);
+    connect(m_fuzzyMatchButton, &QPushButton::clicked, this, &NewMapFromImageDialog::runFuzzyMatching);
     connect(m_createMapButton, &QPushButton::clicked, this, &NewMapFromImageDialog::createMapFromMatch);
     connect(m_reviewUnmatchedButton, &QPushButton::clicked, this, &NewMapFromImageDialog::reviewUnmatched);
     connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -177,6 +200,12 @@ NewMapFromImageDialog::NewMapFromImageDialog(
     });
     connect(m_secondaryTileset, &QComboBox::currentTextChanged, this, [this] {
         resetAnalysis(QStringLiteral("Secondary tileset changed. Run analysis again."));
+    });
+    connect(m_maxFuzzyDistance, qOverload<int>(&QSpinBox::valueChanged), this, [this] {
+        resetAnalysis(QStringLiteral("Fuzzy thresholds changed. Run analysis again."));
+    });
+    connect(m_minFuzzyConfidence, qOverload<int>(&QSpinBox::valueChanged), this, [this] {
+        resetAnalysis(QStringLiteral("Fuzzy thresholds changed. Run analysis again."));
     });
 #ifndef QT_NO_DEBUG
     connect(m_debugExportButton, &QPushButton::clicked, this, &NewMapFromImageDialog::exportDebugMetatiles);
@@ -294,6 +323,7 @@ void NewMapFromImageDialog::resetAnalysis(const QString &message)
     m_differencePreviewLabel->clear();
     m_differencePreviewLabel->setText(QStringLiteral("Run analysis to preview unmatched cells."));
     m_reviewUnmatchedButton->setEnabled(false);
+    m_fuzzyMatchButton->setEnabled(false);
     updateCreateButton();
 #ifndef QT_NO_DEBUG
     m_debugExportButton->setEnabled(false);
@@ -353,21 +383,102 @@ void NewMapFromImageDialog::runAnalysis()
          .arg(mapSize.height()));
         return;
     }
+    ImageMetatileMatcher::MatchOptions exactOptions;
     m_matchResult = m_matcher.match(
         m_imageResult.sourceImage,
         mapSize,
         m_imageResult.metatilePixelSize,
-        m_renderResult.metatiles
+        m_renderResult.metatiles,
+        exactOptions
     );
     if (!m_matchResult.isValid()) {
         resetAnalysis(m_matchResult.errorMessage);
         return;
     }
 
+    updateMatchDisplay();
+}
+
+void NewMapFromImageDialog::runFuzzyMatching()
+{
+    // Re-run exact analysis first so fuzzy suggestions can never use stale
+    // source pixels, tilesets, dimensions, or rendered candidates.
+    runAnalysis();
+    if (!m_matchResult.isValid() || m_matchResult.cells.isEmpty() || m_matchResult.unmatchedCount == 0) {
+        return;
+    }
+
+    ImageMetatileMatcher::MatchOptions fuzzyOptions;
+    fuzzyOptions.allowFuzzy = true;
+    fuzzyOptions.maximumDistance = m_maxFuzzyDistance->value() / 100.0;
+    fuzzyOptions.minimumConfidence = m_minFuzzyConfidence->value() / 100.0;
+    fuzzyOptions.maximumRankedCandidates = 5;
+    QProgressDialog progress(
+        QStringLiteral("Comparing source cells with rendered metatiles…"),
+        QStringLiteral("Cancel"),
+        0,
+        m_matchResult.mapSize.width() * m_matchResult.mapSize.height(),
+        this
+    );
+    progress.setWindowTitle(QStringLiteral("Fuzzy Matching"));
+    progress.setWindowModality(Qt::WindowModal);
+    progress.setMinimumDuration(0);
+    fuzzyOptions.progressCallback = [&progress](int completedCells, int totalCells) {
+        progress.setMaximum(totalCells);
+        progress.setValue(completedCells);
+        QApplication::processEvents();
+        return !progress.wasCanceled();
+    };
+    m_matchResult = m_matcher.match(
+        m_imageResult.sourceImage,
+        m_matchResult.mapSize,
+        m_imageResult.metatilePixelSize,
+        m_renderResult.metatiles,
+        fuzzyOptions
+    );
+    if (!m_matchResult.isValid()) {
+        resetAnalysis(m_matchResult.errorMessage);
+        return;
+    }
+    progress.setValue(progress.maximum());
+
+    updateMatchDisplay();
+}
+
+void NewMapFromImageDialog::updateMatchDisplay()
+{
     const int cellCount = m_matchResult.cells.count();
     const double matchPercentage = cellCount == 0
         ? 0.0
         : (100.0 * m_matchResult.exactMatchCount) / cellCount;
+    QString fuzzySummary;
+    QString status;
+    if (m_matchResult.usedFuzzyMatching) {
+        fuzzySummary = QString(
+            "Fuzzy Accepted:\n"
+            "%1\n\n"
+            "Fuzzy Uncertain:\n"
+            "%2\n\n"
+            "Fuzzy Rejected:\n"
+            "%3\n\n"
+            "Thresholds:\n"
+            "distance ≤ %4%, confidence ≥ %5%\n\n"
+        ).arg(m_matchResult.fuzzyAcceptedCount)
+         .arg(m_matchResult.fuzzyUncertainCount)
+         .arg(m_matchResult.fuzzyRejectedCount)
+         .arg(m_maxFuzzyDistance->value())
+         .arg(m_minFuzzyConfidence->value());
+        status = QStringLiteral(
+            "FUZZY SUGGESTIONS READY\n"
+            "Suggestions are not approved for map creation. Review them before a future correction step."
+        );
+    } else if (m_matchResult.unmatchedCount == 0) {
+        status = QStringLiteral("EXACT RECONSTRUCTION READY");
+    } else {
+        status = QString("%1 cells require attention; fuzzy matching is available.")
+            .arg(m_matchResult.unmatchedCount);
+    }
+
     const QString summary = QString(
         "RECONSTRUCTION RESULTS\n\n"
         "Map:\n"
@@ -376,31 +487,32 @@ void NewMapFromImageDialog::runAnalysis()
         "%3\n\n"
         "Exact Matches:\n"
         "%4  %5%\n\n"
-        "Unmatched:\n"
+        "Non-exact Cells:\n"
         "%6\n\n"
+        "%7"
         "Primary Tileset:\n"
-        "%7 matches\n\n"
+        "%8 exact matches\n\n"
         "Secondary Tileset:\n"
-        "%8 matches\n\n"
+        "%9 exact matches\n\n"
         "Rendering Context:\n"
-        "%9\n\n"
+        "%10\n\n"
         "Status:\n"
-        "%10"
-    ).arg(mapSize.width())
-     .arg(mapSize.height())
+        "%11"
+    ).arg(m_matchResult.mapSize.width())
+     .arg(m_matchResult.mapSize.height())
      .arg(cellCount)
      .arg(m_matchResult.exactMatchCount)
      .arg(QString::number(matchPercentage, 'f', 1))
      .arg(m_matchResult.unmatchedCount)
+     .arg(fuzzySummary)
      .arg(m_matchResult.primaryMatchCount)
      .arg(m_matchResult.secondaryMatchCount)
      .arg(m_renderContext.description)
-     .arg(m_matchResult.unmatchedCount == 0
-        ? QStringLiteral("EXACT RECONSTRUCTION READY")
-        : QString("%1 cells require attention").arg(m_matchResult.unmatchedCount));
+     .arg(status);
     m_analysisSummary->setPlainText(summary);
     updatePreview();
     m_reviewUnmatchedButton->setEnabled(m_matchResult.unmatchedCount > 0);
+    m_fuzzyMatchButton->setEnabled(m_matchResult.unmatchedCount > 0);
     updateCreateButton();
 #ifndef QT_NO_DEBUG
     m_debugExportButton->setEnabled(!m_renderResult.metatiles.isEmpty());
@@ -585,30 +697,102 @@ void NewMapFromImageDialog::reviewUnmatched()
     auto *previewLabel = new QLabel(&reviewDialog);
     previewLabel->setAlignment(Qt::AlignCenter);
     previewLabel->setMinimumSize(180, 180);
+    auto *detailsLabel = new QLabel(&reviewDialog);
+    detailsLabel->setAlignment(Qt::AlignTop | Qt::AlignLeft);
+    detailsLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    detailsLabel->setWordWrap(true);
+    detailsLabel->setMinimumWidth(260);
 
     QList<const ImageMetatileMatcher::CellResult *> unmatchedCells;
     for (const auto &cell : m_matchResult.cells) {
         if (!cell.matched) {
             unmatchedCells.append(&cell);
-            cellList->addItem(QString("Column %1, Row %2")
+            QString outcome = QStringLiteral("No exact match");
+            if (m_matchResult.usedFuzzyMatching) {
+                switch (cell.status) {
+                case ImageMetatileMatcher::MatchStatus::FuzzyAccepted:
+                    outcome = QStringLiteral("Accepted suggestion");
+                    break;
+                case ImageMetatileMatcher::MatchStatus::FuzzyUncertain:
+                    outcome = QStringLiteral("Uncertain suggestion");
+                    break;
+                case ImageMetatileMatcher::MatchStatus::FuzzyRejected:
+                    outcome = QStringLiteral("Rejected");
+                    break;
+                default:
+                    break;
+                }
+            }
+            cellList->addItem(QString("Column %1, Row %2 — %3")
                 .arg(cell.position.x())
-                .arg(cell.position.y()));
+                .arg(cell.position.y())
+                .arg(outcome));
         }
     }
 
     layout->addWidget(cellList, 2);
-    layout->addWidget(previewLabel, 1);
-    connect(cellList, &QListWidget::currentRowChanged, &reviewDialog, [previewLabel, unmatchedCells](int row) {
+    auto *detailsLayout = new QVBoxLayout();
+    detailsLayout->addWidget(previewLabel);
+    detailsLayout->addWidget(detailsLabel, 1);
+    layout->addLayout(detailsLayout, 2);
+    connect(
+        cellList,
+        &QListWidget::currentRowChanged,
+        &reviewDialog,
+        [previewLabel, detailsLabel, unmatchedCells](int row) {
         if (row < 0 || row >= unmatchedCells.count()) {
             previewLabel->clear();
+            detailsLabel->clear();
             return;
         }
-        previewLabel->setPixmap(QPixmap::fromImage(unmatchedCells.at(row)->sourceImage.scaled(
+        const auto *cell = unmatchedCells.at(row);
+        previewLabel->setPixmap(QPixmap::fromImage(cell->sourceImage.scaled(
             160,
             160,
             Qt::KeepAspectRatio,
             Qt::FastTransformation
         )));
+
+        QString outcome = QStringLiteral("No exact match.");
+        switch (cell->status) {
+        case ImageMetatileMatcher::MatchStatus::FuzzyAccepted:
+            outcome = QStringLiteral("Accepted by the current thresholds, but not approved for map creation.");
+            break;
+        case ImageMetatileMatcher::MatchStatus::FuzzyUncertain:
+            outcome = QStringLiteral("Within the distance threshold, but below minimum confidence.");
+            break;
+        case ImageMetatileMatcher::MatchStatus::FuzzyRejected:
+            outcome = cell->rankedCandidates.isEmpty()
+                ? QStringLiteral("No exact match. Run fuzzy matching to rank alternatives.")
+                : QStringLiteral("The closest candidate exceeds the distance threshold.");
+            break;
+        default:
+            break;
+        }
+
+        QString details = outcome;
+        if (!cell->rankedCandidates.isEmpty()) {
+            details.append(QString(
+                "\n\nBest distance: %1%\nConfidence: %2%"
+            ).arg(QString::number(cell->bestDistance * 100.0, 'f', 2))
+             .arg(QString::number(cell->confidence * 100.0, 'f', 1)));
+            details.append(QStringLiteral("\n\nRanked candidates:"));
+            for (int index = 0; index < cell->rankedCandidates.count(); index++) {
+                const auto &candidate = cell->rankedCandidates.at(index);
+                const QString owner = candidate.sourceTileset
+                        == MetatileRenderService::SourceTileset::Primary
+                    ? QStringLiteral("primary")
+                    : QStringLiteral("secondary");
+                details.append(QString(
+                    "\n%1. %2 (%3, ID 0x%4) — distance %5%"
+                ).arg(index + 1)
+                 .arg(candidate.sourceTilesetName)
+                 .arg(owner)
+                 .arg(candidate.metatileId, 4, 16, QLatin1Char('0'))
+                 .arg(QString::number(candidate.distance * 100.0, 'f', 2)));
+            }
+        }
+        detailsLabel->setText(details);
     });
 
     cellList->setCurrentRow(0);

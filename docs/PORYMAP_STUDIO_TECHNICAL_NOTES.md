@@ -86,7 +86,7 @@ file.
 `Studio::ImageMetatileMatcher` splits only the unchanged, grid-aligned source
 image into metatile-sized cells. It normalizes source cells and the Phase 1
 candidate images to `QImage::Format_RGBA8888`, then performs exact byte-for-byte
-pixel matching. It intentionally has no fuzzy, ranked, or approximate mode.
+pixel matching. Exact matching remains the first and preferred path.
 
 The matcher retains a coordinate, source-cell image, and matched metatile
 identity (when present) for every cell. It builds reconstructed and difference
@@ -95,6 +95,38 @@ normalized source image, while unmatched cells are visibly highlighted for
 review. The dialog offers Original, Reconstructed, and Differences tabs plus
 an unmatched-cell inspector. None of these actions creates, changes, or saves
 maps, layouts, tilesets, collision data, or project files.
+
+### Phase 4 fuzzy matching boundary
+
+Fuzzy matching is an explicit second analysis step offered only after exact
+matching leaves cells unresolved. It never replaces or downgrades an exact
+match. For each non-exact cell, the matcher compares normalized, premultiplied
+RGBA channel values and reports mean absolute channel distance normalized to
+the range 0.0–1.0. Premultiplication ensures invisible RGB values in fully
+transparent pixels do not distort visual similarity.
+
+Candidates are ordered by ascending distance, with their original deterministic
+render order breaking ties. Confidence combines closeness with the normalized
+distance gap between the best and second-best candidates. Equal best
+candidates therefore have zero confidence rather than appearing certain.
+
+The dialog exposes maximum distance and minimum confidence as percentages:
+
+- a best candidate within both thresholds is an accepted suggestion;
+- a candidate within the distance threshold but below minimum confidence is
+  uncertain; and
+- a candidate outside the distance threshold is rejected.
+
+Accepted means only that the deterministic thresholds accepted the suggestion.
+It does not mean the user approved the metatile for import. Fuzzy results show
+ranked alternatives and colored diagnostics, but the Create Map action remains
+available only for complete exact reconstructions. Manual selection and
+approval belong to the correction milestone.
+
+Fuzzy evaluations are cached for repeated source cells and only the candidates
+needed for confidence and display are partially sorted. The dialog also reports
+progress for every source cell and permits cancellation between cells, keeping
+large analyses observable and interruptible without changing ranking order.
 
 #### Reproducible developer verification
 
