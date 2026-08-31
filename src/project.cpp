@@ -24,6 +24,7 @@
 #include <QMessageBox>
 #include <QRegularExpression>
 #include <algorithm>
+#include <limits>
 
 int Project::num_tiles_primary = 512;
 int Project::num_tiles_total = 1024;
@@ -514,12 +515,30 @@ Map *Project::createNewMap(const Project::NewMapSettings &settings, const Blockd
 
 Map *Project::createNewMapInternal(const Project::NewMapSettings &settings, const Map *toDuplicate,
                                    const Blockdata *initialBlockdata) {
-    const int expectedBlockCount = settings.layout.width * settings.layout.height;
-    if (initialBlockdata && (expectedBlockCount <= 0 || initialBlockdata->count() != expectedBlockCount)) {
+    if (settings.name.isEmpty() || !isIdentifierUnique(settings.name)) {
+        logError(QString("Cannot create new map with empty or non-unique name '%1'.").arg(settings.name));
+        return nullptr;
+    }
+
+    Layout *existingLayout = this->mapLayouts.value(settings.layout.id);
+    if (!existingLayout
+        && (settings.layout.id.isEmpty() || !isIdentifierUnique(settings.layout.id))) {
+        logError(QString("Cannot create new map '%1' with empty or non-unique layout ID '%2'.")
+                 .arg(settings.name)
+                 .arg(settings.layout.id));
+        return nullptr;
+    }
+
+    const qint64 expectedBlockCount = static_cast<qint64>(settings.layout.width) * settings.layout.height;
+    if (initialBlockdata
+        && (!mapDimensionsValid(settings.layout.width, settings.layout.height)
+            || expectedBlockCount <= 0
+            || expectedBlockCount > std::numeric_limits<int>::max()
+            || initialBlockdata->count() != static_cast<int>(expectedBlockCount))) {
         logError(QString("Cannot create new map '%1' with invalid initial blockdata.").arg(settings.name));
         return nullptr;
     }
-    if (initialBlockdata && this->mapLayouts.contains(settings.layout.id)) {
+    if (initialBlockdata && existingLayout) {
         logError(QString("Cannot import map '%1' into existing layout '%2'.")
                  .arg(settings.name)
                  .arg(settings.layout.id));
@@ -544,7 +563,7 @@ Map *Project::createNewMapInternal(const Project::NewMapSettings &settings, cons
         }
     }
 
-    Layout *layout = this->mapLayouts.value(settings.layout.id);
+    Layout *layout = existingLayout;
     if (!layout) {
         // Layout doesn't already exist, create it.
         layout = createNewLayout(
@@ -567,6 +586,20 @@ Map *Project::createNewMapInternal(const Project::NewMapSettings &settings, cons
     map->setLayout(layout);
 
     if (initialBlockdata) {
+        for (const auto &block : *initialBlockdata) {
+            if (!layout->metatileIsValid(block.metatileId())) {
+                logError(QString("Cannot import map '%1' with metatile ID %2, which is invalid for its tilesets.")
+                         .arg(settings.name)
+                         .arg(block.metatileId()));
+                this->mapLayouts.remove(layout->id);
+                this->orderedLayoutIds.removeAll(layout->id);
+                this->loadedLayoutIds.remove(layout->id);
+                this->alphabeticalLayoutIds.removeAll(layout->id);
+                delete layout;
+                delete map;
+                return nullptr;
+            }
+        }
         layout->editHistory.push(new ImportMetatiles(layout, layout->blockdata, *initialBlockdata));
         emit layoutCreated(layout);
     }
@@ -3507,7 +3540,15 @@ int Project::getMaxMapHeight() const {
 }
 
 bool Project::mapDimensionsValid(int width, int height) const {
-    return getMapDataSize(width, height) <= getMaxMapDataSize();
+    if (width <= 0 || height <= 0) {
+        return false;
+    }
+    const qint64 dataWidth = static_cast<qint64>(width) + this->mapSizeAddition.width();
+    const qint64 dataHeight = static_cast<qint64>(height) + this->mapSizeAddition.height();
+    if (dataWidth <= 0 || dataHeight <= 0) {
+        return false;
+    }
+    return dataWidth * dataHeight <= static_cast<qint64>(getMaxMapDataSize());
 }
 
 // Object events have their own limit specified by ProjectIdentifier::define_obj_event_count.

@@ -1,10 +1,19 @@
 #include "studio/imagemetatileapproval.h"
 
 #include <QSet>
+#include <limits>
 
 namespace Studio::ImageMetatileApproval {
 
 namespace {
+
+bool fail(QString *errorMessage, const QString &message)
+{
+    if (errorMessage) {
+        *errorMessage = message;
+    }
+    return false;
+}
 
 const MetatileRenderService::RenderedMetatile *findRenderedCandidate(
     const ImageMetatileMatcher::CandidateResult &candidate,
@@ -87,6 +96,54 @@ bool resolveMetatileId(
         return false;
     }
     *metatileId = correctionIt.value().candidate.metatileId;
+    return true;
+}
+
+bool buildBlockdata(
+    const QList<ImageMetatileMatcher::CellResult> &cells,
+    const QHash<int, ImageMetatileCorrection> &corrections,
+    const QSize &mapSize,
+    const QList<MetatileRenderService::RenderedMetatile> &renderedMetatiles,
+    Blockdata *blockdata,
+    QString *errorMessage)
+{
+    if (!blockdata) {
+        return fail(errorMessage, QStringLiteral("No blockdata output was provided."));
+    }
+    if (errorMessage) {
+        errorMessage->clear();
+    }
+    blockdata->clear();
+
+    if (!mapSize.isValid()) {
+        return fail(errorMessage, QStringLiteral("Map dimensions are invalid."));
+    }
+    const qint64 expectedBlockCount = static_cast<qint64>(mapSize.width()) * mapSize.height();
+    if (expectedBlockCount <= 0 || expectedBlockCount > std::numeric_limits<int>::max()) {
+        return fail(errorMessage, QStringLiteral("Map dimensions are outside the supported range."));
+    }
+    if (cells.isEmpty()) {
+        return fail(errorMessage, QStringLiteral("The match result contains no cells."));
+    }
+    if (!allCellsResolved(cells, corrections, mapSize, renderedMetatiles)) {
+        return fail(
+            errorMessage,
+            QStringLiteral("The match result is incomplete, duplicated, out of bounds, or has an invalid correction.")
+        );
+    }
+
+    blockdata->resize(static_cast<int>(expectedBlockCount));
+    for (const auto &cell : cells) {
+        const int index = cell.position.y() * mapSize.width() + cell.position.x();
+        uint16_t metatileId = 0;
+        if (!resolveMetatileId(cell, index, corrections, renderedMetatiles, &metatileId)) {
+            blockdata->clear();
+            return fail(errorMessage, QStringLiteral("A cell could not be resolved to a metatile."));
+        }
+        // Imported images only provide metatile identities. Collision and
+        // elevation remain the project's normal default values until edited.
+        (*blockdata)[index] = Block(metatileId, 0, 0);
+    }
     return true;
 }
 

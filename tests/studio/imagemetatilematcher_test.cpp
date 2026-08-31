@@ -8,6 +8,36 @@
 
 #include <cmath>
 #include <iostream>
+#include <limits>
+
+// This focused test target does not link Porymap's full project configuration
+// stack. Provide the small value-type portion of Block used by Blockdata here;
+// the application build continues to use src/core/block.cpp.
+Block::Block()
+    : m_metatileId(0),
+      m_collision(0),
+      m_elevation(0)
+{}
+
+Block::Block(uint16_t metatileId, uint16_t collision, uint16_t elevation)
+    : m_metatileId(metatileId),
+      m_collision(collision),
+      m_elevation(elevation)
+{}
+
+Block::Block(const Block &other)
+    : m_metatileId(other.m_metatileId),
+      m_collision(other.m_collision),
+      m_elevation(other.m_elevation)
+{}
+
+Block &Block::operator=(const Block &other)
+{
+    m_metatileId = other.m_metatileId;
+    m_collision = other.m_collision;
+    m_elevation = other.m_elevation;
+    return *this;
+}
 
 namespace {
 
@@ -377,6 +407,141 @@ void testApprovalLifecycleAndExactResolution()
     );
 }
 
+void testApprovedCellsBuildRowMajorBlockdata()
+{
+    const QImage source = solidImage(QColor(10, 20, 30, 255));
+    const QImage fuzzyImage = solidImage(QColor(40, 50, 60, 255));
+    const QList<RenderedMetatile> renderedMetatiles = {
+        candidate(7, fuzzyImage),
+    };
+
+    Matcher::CellResult topLeft;
+    topLeft.position = QPoint(0, 0);
+    topLeft.sourceImage = source;
+    topLeft.matched = true;
+    topLeft.metatileId = 11;
+
+    Matcher::CellResult topRight = topLeft;
+    topRight.position = QPoint(1, 0);
+    topRight.metatileId = 12;
+
+    Matcher::CellResult bottomLeft = topLeft;
+    bottomLeft.position = QPoint(0, 1);
+    bottomLeft.metatileId = 13;
+
+    Matcher::CellResult bottomRight;
+    bottomRight.position = QPoint(1, 1);
+    bottomRight.sourceImage = source;
+    bottomRight.rankedCandidates = {candidateResult(7)};
+
+    Correction correction;
+    correction.candidate = candidateResult(7);
+    correction.sourceImage = source;
+    correction.renderedImage = fuzzyImage;
+    correction.approved = true;
+    QHash<int, Correction> corrections;
+    corrections.insert(3, correction);
+
+    Blockdata blockdata;
+    QString errorMessage;
+    expect(
+        Studio::ImageMetatileApproval::buildBlockdata(
+            {bottomRight, topRight, bottomLeft, topLeft},
+            corrections,
+            QSize(2, 2),
+            renderedMetatiles,
+            &blockdata,
+            &errorMessage
+        ),
+        "approved cells should build standard blockdata"
+    );
+    expect(errorMessage.isEmpty(), "successful blockdata generation should not report an error");
+    expect(blockdata.count() == 4, "generated blockdata should match map dimensions");
+    expect(
+        blockdata.count() == 4
+            && blockdata.at(0).metatileId() == 11
+            && blockdata.at(1).metatileId() == 12
+            && blockdata.at(2).metatileId() == 13
+            && blockdata.at(3).metatileId() == 7,
+        "generated blockdata should use cell coordinates in row-major order"
+    );
+    bool defaultsPreserved = true;
+    for (const auto &block : blockdata) {
+        defaultsPreserved = defaultsPreserved
+            && block.collision() == 0
+            && block.elevation() == 0;
+    }
+    expect(defaultsPreserved, "image import should leave collision and elevation at zero");
+}
+
+void testInvalidCellsCannotBuildBlockdata()
+{
+    Matcher::CellResult cell;
+    cell.position = QPoint(0, 0);
+    cell.sourceImage = solidImage(Qt::black);
+    cell.matched = true;
+    cell.metatileId = 1;
+
+    Blockdata blockdata;
+    expect(
+        !Studio::ImageMetatileApproval::buildBlockdata(
+            {cell},
+            {},
+            QSize(2, 1),
+            {},
+            &blockdata
+        ),
+        "incomplete cell coverage must not build blockdata"
+    );
+    expect(blockdata.isEmpty(), "failed blockdata generation should leave no partial output");
+
+    Matcher::CellResult duplicate = cell;
+    expect(
+        !Studio::ImageMetatileApproval::buildBlockdata(
+            {cell, duplicate},
+            {},
+            QSize(2, 1),
+            {},
+            &blockdata
+        ),
+        "duplicate cell coordinates must not build blockdata"
+    );
+    expect(blockdata.isEmpty(), "duplicate cells should leave no partial output");
+
+    cell.position = QPoint(2, 0);
+    expect(
+        !Studio::ImageMetatileApproval::buildBlockdata(
+            {cell},
+            {},
+            QSize(1, 1),
+            {},
+            &blockdata
+        ),
+        "out-of-bounds cells must not build blockdata"
+    );
+
+    expect(
+        !Studio::ImageMetatileApproval::buildBlockdata(
+            {cell},
+            {},
+            QSize(-1, -1),
+            {},
+            &blockdata
+        ),
+        "negative map dimensions must not build blockdata"
+    );
+    expect(
+        !Studio::ImageMetatileApproval::buildBlockdata(
+            {cell},
+            {},
+            QSize(std::numeric_limits<int>::max(), std::numeric_limits<int>::max()),
+            {},
+            &blockdata
+        ),
+        "overflowing map dimensions must not build blockdata"
+    );
+}
+
 } // namespace
 
 int main()
@@ -388,6 +553,8 @@ int main()
     testInvalidOptionsAreRejected();
     testFuzzyMatchingCanBeCancelled();
     testApprovalLifecycleAndExactResolution();
+    testApprovedCellsBuildRowMajorBlockdata();
+    testInvalidCellsCannotBuildBlockdata();
 
     if (failures == 0) {
         std::cout << "All Studio image matching and approval tests passed.\n";

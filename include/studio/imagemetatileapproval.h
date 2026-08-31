@@ -4,6 +4,7 @@
 #include <QList>
 #include <QSize>
 
+#include "blockdata.h"
 #include "studio/imagemetatilematcher.h"
 
 namespace Studio {
@@ -35,6 +36,14 @@ bool resolveMetatileId(
     const QHash<int, ImageMetatileCorrection> &corrections,
     const QList<MetatileRenderService::RenderedMetatile> &renderedMetatiles,
     uint16_t *metatileId);
+
+bool buildBlockdata(
+    const QList<ImageMetatileMatcher::CellResult> &cells,
+    const QHash<int, ImageMetatileCorrection> &corrections,
+    const QSize &mapSize,
+    const QList<MetatileRenderService::RenderedMetatile> &renderedMetatiles,
+    Blockdata *blockdata,
+    QString *errorMessage = nullptr);
 
 } // namespace ImageMetatileApproval
 } // namespace Studio

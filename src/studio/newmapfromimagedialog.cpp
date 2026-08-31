@@ -657,59 +657,29 @@ void NewMapFromImageDialog::createMapFromMatch()
     }
 
     Blockdata importedBlockdata;
-    importedBlockdata.resize(mapSize.width() * mapSize.height());
-    QList<bool> populated(importedBlockdata.count(), false);
-    int approvedCorrectionCount = 0;
-    for (const auto &cell : m_matchResult.cells) {
-        if (cell.position.x() < 0 || cell.position.x() >= mapSize.width()
-            || cell.position.y() < 0 || cell.position.y() >= mapSize.height()) {
-            QMessageBox::warning(
-                this,
-                QStringLiteral("Cannot Create Map"),
-                QStringLiteral("The match result contains an invalid cell. Run analysis again.")
-            );
-            resetAnalysis(QStringLiteral("Match results are no longer valid. Run analysis again."));
-            return;
-        }
-        const int index = cell.position.y() * mapSize.width() + cell.position.x();
-        if (populated.at(index)) {
-            QMessageBox::warning(
-                this,
-                QStringLiteral("Cannot Create Map"),
-                QStringLiteral("The match result contains duplicate cells. Run analysis again.")
-            );
-            resetAnalysis(QStringLiteral("Match results are no longer valid. Run analysis again."));
-            return;
-        }
-        uint16_t metatileId = 0;
-        if (!ImageMetatileApproval::resolveMetatileId(
-                cell,
-                index,
-                m_corrections,
-                m_renderResult.metatiles,
-                &metatileId)) {
-            QMessageBox::warning(
-                this,
-                QStringLiteral("Cannot Create Map"),
-                QStringLiteral("A correction is stale or incomplete. Review the fuzzy suggestions again.")
-            );
-            resetAnalysis(QStringLiteral("Corrections changed. Review fuzzy suggestions again."));
-            return;
-        }
-        importedBlockdata[index] = Block(metatileId, 0, 0);
-        if (!cell.matched) {
-            approvedCorrectionCount++;
-        }
-        populated[index] = true;
-    }
-    if (populated.contains(false)) {
+    QString blockdataError;
+    if (!ImageMetatileApproval::buildBlockdata(
+            m_matchResult.cells,
+            m_corrections,
+            mapSize,
+            m_renderResult.metatiles,
+            &importedBlockdata,
+            &blockdataError)) {
         QMessageBox::warning(
             this,
             QStringLiteral("Cannot Create Map"),
-            QStringLiteral("The match result does not cover the complete map. Run analysis again.")
+            blockdataError.isEmpty()
+                ? QStringLiteral("The match result is no longer valid. Run analysis again.")
+                : blockdataError
         );
-        resetAnalysis(QStringLiteral("Match results are incomplete. Run analysis again."));
+        resetAnalysis(QStringLiteral("Match results are no longer valid. Run analysis again."));
         return;
+    }
+    int approvedCorrectionCount = 0;
+    for (const auto &cell : m_matchResult.cells) {
+        if (!cell.matched) {
+            approvedCorrectionCount++;
+        }
     }
 
     const auto confirmation = QMessageBox::question(

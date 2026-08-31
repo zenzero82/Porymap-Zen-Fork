@@ -156,6 +156,26 @@ corrections block creation, replacements require re-approval, changed source or
 rendered pixels invalidate approvals, exact cells retain their exact IDs, and
 approved fuzzy cells resolve to the selected metatile ID.
 
+### Phase 6 normal layout generation boundary
+
+The approved-cell conversion is a shared, UI-independent operation. It requires
+complete, unique, in-bounds cell coverage for the selected dimensions and
+revalidates every correction before producing row-major `Blockdata`. Exact
+cells retain their exact metatile IDs, approved corrections use the explicitly
+selected IDs, and collision/elevation remain zero.
+
+The dialog passes that standard `Blockdata` to `Project::createNewMap()`.
+Project creation remains the authority for map and layout identifiers, map
+dimensions, tilesets, group registration, and metatile validity. The initial
+layout replacement is a single `ImportMetatiles` command on the existing layout
+undo stack. The normal `mapCreated`/`layoutCreated` signals select and display
+the map through the editor, and the existing dirty-state and save APIs remain
+the only persistence path.
+
+If validation fails, no map is registered and any newly allocated layout is
+removed before signals are emitted. Studio does not write map, layout, group,
+or project files directly and does not define a parallel map representation.
+
 #### Reproducible developer verification
 
 1. Build with `./scripts/replit-build.sh`.

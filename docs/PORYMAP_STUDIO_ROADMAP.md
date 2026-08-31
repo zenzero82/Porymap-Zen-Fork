@@ -61,9 +61,15 @@ compatible with future upstream merges.
 
 ## Milestone 6 — Generate Porymap layouts
 
+**Status: Complete.**
+
 - Convert an approved result into normal `Layout`/`Blockdata` edits.
 - Use existing undo, dirty-state, validation, and save paths.
 - Never write a parallel map format.
+- Reject incomplete, duplicate, out-of-bounds, stale, or tileset-invalid
+  blockdata before a map is registered.
+- Keep native regression coverage for row-major placement, exact and approved
+  fuzzy IDs, and default collision/elevation values.
 
 ## Milestone 7 — Porytiles integration
 
