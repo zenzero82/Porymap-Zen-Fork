@@ -36,3 +36,7 @@ isValidation = true
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "./scripts/replit-build.sh"
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 180000
