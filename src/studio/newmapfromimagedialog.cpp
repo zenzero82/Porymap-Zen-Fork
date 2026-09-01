@@ -6,6 +6,7 @@
 #include "project.h"
 #include "tileset.h"
 #include "config.h"
+#include "validator.h"
 
 #include <QAbstractItemView>
 #include <QCheckBox>
@@ -64,6 +65,35 @@ NewMapFromImageDialog::NewMapFromImageDialog(
     sourceLayout->addWidget(new QLabel(QStringLiteral("Dimensions:"), sourceGroup), 1, 0);
     sourceLayout->addWidget(m_imageDimensions, 1, 1, 1, 2);
     mainLayout->addWidget(sourceGroup);
+
+    auto *tilesetSourceGroup = new QGroupBox(QStringLiteral("Tileset Source"), this);
+    auto *tilesetSourceLayout = new QFormLayout(tilesetSourceGroup);
+    m_createTilesetFromImage = new QCheckBox(
+        QStringLiteral("Build a new tileset from this image"),
+        tilesetSourceGroup
+    );
+    m_newTilesetName = new QLineEdit(tilesetSourceGroup);
+    m_newTilesetType = new QComboBox(tilesetSourceGroup);
+    m_newTilesetType->addItems({QStringLiteral("Primary"), QStringLiteral("Secondary")});
+    m_newTilesetHelp = new QLabel(tilesetSourceGroup);
+    m_newTilesetHelp->setWordWrap(true);
+    m_newTilesetHelp->setText(QStringLiteral(
+        "The image will be reduced to one game palette, deduplicated into 8 × 8 tiles, "
+        "assembled into 16 × 16 metatiles, and paired with the existing opposite tileset."
+    ));
+    const QString tilesetPrefix =
+        projectConfig.getIdentifier(ProjectIdentifier::symbol_tilesets_prefix);
+    m_newTilesetName->setValidator(new IdentifierValidator(tilesetPrefix, this));
+    m_newTilesetName->setText(
+        m_project
+            ? m_project->toUniqueIdentifier(tilesetPrefix + QStringLiteral("ImageImport"))
+            : tilesetPrefix + QStringLiteral("ImageImport")
+    );
+    tilesetSourceLayout->addRow(QString(), m_createTilesetFromImage);
+    tilesetSourceLayout->addRow(QStringLiteral("New Tileset Name:"), m_newTilesetName);
+    tilesetSourceLayout->addRow(QStringLiteral("New Tileset Role:"), m_newTilesetType);
+    tilesetSourceLayout->addRow(QString(), m_newTilesetHelp);
+    mainLayout->addWidget(tilesetSourceGroup);
 
     auto *configurationGroup = new QGroupBox(QStringLiteral("Map Configuration"), this);
     auto *configurationLayout = new QFormLayout(configurationGroup);
@@ -219,6 +249,17 @@ NewMapFromImageDialog::NewMapFromImageDialog(
     connect(m_secondaryTileset, &QComboBox::currentTextChanged, this, [this] {
         resetAnalysis(QStringLiteral("Secondary tileset changed. Run analysis again."));
     });
+    connect(m_createTilesetFromImage, &QCheckBox::toggled, this, [this] {
+        updateTilesetSourceControls();
+        resetAnalysis(QStringLiteral("Tileset source changed. Run analysis again."));
+    });
+    connect(m_newTilesetType, qOverload<int>(&QComboBox::currentIndexChanged), this, [this] {
+        updateTilesetSourceControls();
+        resetAnalysis(QStringLiteral("New tileset role changed. Run analysis again."));
+    });
+    connect(m_newTilesetName, &QLineEdit::textChanged, this, [this] {
+        resetAnalysis(QStringLiteral("New tileset name changed. Run analysis again."));
+    });
     connect(m_maxFuzzyDistance, qOverload<int>(&QSpinBox::valueChanged), this, [this] {
         resetAnalysis(QStringLiteral("Fuzzy thresholds changed. Run analysis again."));
     });
@@ -235,6 +276,7 @@ NewMapFromImageDialog::NewMapFromImageDialog(
 #ifndef QT_NO_DEBUG
     connect(m_debugExportButton, &QPushButton::clicked, this, &NewMapFromImageDialog::exportDebugMetatiles);
 #endif
+    updateTilesetSourceControls();
 }
 
 bool NewMapFromImageDialog::eventFilter(QObject *watched, QEvent *event)
@@ -343,6 +385,7 @@ void NewMapFromImageDialog::resetAnalysis(const QString &message)
     }
     m_renderResult = {};
     m_matchResult = {};
+    m_tilesetBuildResult = {};
     m_analysisReconstructedImage = {};
     m_analysisDifferenceImage = {};
     m_corrections.clear();
@@ -380,6 +423,81 @@ void NewMapFromImageDialog::runAnalysis()
             "Manual dimensions must match the unchanged image: %1 × %2 blocks."
         ).arg(m_imageResult.mapSize.width())
          .arg(m_imageResult.mapSize.height()));
+        return;
+    }
+    if (m_createTilesetFromImage->isChecked()) {
+        const bool secondary = m_newTilesetType->currentIndex() == 1;
+        const QString pairedTilesetLabel = secondary
+            ? m_primaryTileset->currentText()
+            : m_secondaryTileset->currentText();
+        if (pairedTilesetLabel.isEmpty() || !m_project->getTileset(pairedTilesetLabel)) {
+            resetAnalysis(QString(
+                "Select an existing %1 tileset to pair with the generated %2 tileset."
+            ).arg(secondary ? QStringLiteral("primary") : QStringLiteral("secondary"),
+                  secondary ? QStringLiteral("secondary") : QStringLiteral("primary")));
+            return;
+        }
+        const QSize mapSize = m_autoDimensions->isChecked()
+            ? m_imageResult.mapSize
+            : QSize(m_mapWidth->value(), m_mapHeight->value());
+        if (!m_project->mapDimensionsValid(mapSize.width(), mapSize.height())) {
+            resetAnalysis(QString(
+                "Porymap rejects map dimensions %1 × %2 blocks for this project."
+            ).arg(mapSize.width()).arg(mapSize.height()));
+            return;
+        }
+
+        m_tilesetBuildResult = m_tilesetBuilder.build(
+            m_imageResult.sourceImage,
+            tilesetBuildOptions(secondary)
+        );
+        if (!m_tilesetBuildResult.isValid()) {
+            const QString error = m_tilesetBuildResult.errorMessage;
+            resetAnalysis(error);
+            return;
+        }
+
+        m_matchResult = {};
+        m_matchResult.reconstructedImage = m_tilesetBuildResult.indexedSource;
+        m_reconstructedPreviewLabel->clear();
+        m_differencePreviewLabel->clear();
+        m_differencePreviewLabel->setText(QStringLiteral(
+            "No matching differences: every source cell becomes a generated metatile."
+        ));
+        const QString colorSummary = m_tilesetBuildResult.quantized
+            ? QString("%1 source colors reduced to 15 visible game colors plus transparency.")
+                  .arg(m_tilesetBuildResult.sourceColorCount)
+            : QString("%1 source colors fit the generated game palette.")
+                  .arg(m_tilesetBuildResult.sourceColorCount);
+        m_analysisSummary->setPlainText(QString(
+            "GENERATED TILESET READY\n\n"
+            "Map:\n%1 × %2 blocks\n\n"
+            "Stored 8 × 8 Tiles:\n%3 of %4 available (includes transparent tile zero)\n\n"
+            "Unique 16 × 16 Metatiles:\n%5 of %6 available\n\n"
+            "Palette:\n%7\n\n"
+            "Role:\n%8\n\n"
+            "Paired Tileset:\n%9\n\n"
+            "Status:\nReady to create the tileset and map."
+        ).arg(mapSize.width())
+         .arg(mapSize.height())
+         .arg(m_tilesetBuildResult.uniqueTileCount)
+         .arg(secondary ? Project::getNumTilesSecondary() : Project::getNumTilesPrimary())
+         .arg(m_tilesetBuildResult.uniqueMetatileCount)
+         .arg(secondary ? Project::getNumMetatilesSecondary() : Project::getNumMetatilesPrimary())
+         .arg(colorSummary)
+         .arg(secondary ? QStringLiteral("Secondary") : QStringLiteral("Primary"))
+         .arg(pairedTilesetLabel));
+        m_fuzzyMatchButton->setEnabled(false);
+        m_reviewUnmatchedButton->setEnabled(false);
+        m_renderResult = {};
+        m_collisionResult = m_collisionSuggester.suggest(
+            m_imageResult.sourceImage, mapSize,
+            Block::getMaxCollision(), Block::getMaxElevation(),
+            projectConfig.defaultCollision, projectConfig.defaultElevation,
+            m_inferBlockedCollision->isChecked() ? m_blockedCollision->value() : -1);
+        m_reviewCollisionButton->setEnabled(m_collisionResult.valid);
+        updatePreview();
+        updateCreateButton();
         return;
     }
     if (m_primaryTileset->currentText().isEmpty() || m_secondaryTileset->currentText().isEmpty()) {
@@ -597,6 +715,10 @@ void NewMapFromImageDialog::createMapFromMatch()
         QMessageBox::warning(this, QStringLiteral("Cannot Create Map"), QStringLiteral("No project is loaded."));
         return;
     }
+    if (m_createTilesetFromImage->isChecked()) {
+        createMapWithGeneratedTileset();
+        return;
+    }
 
     // Rendering and matching are intentionally repeated at commit time so the
     // map can never be created from stale tileset or rendering state. Keep the
@@ -757,6 +879,173 @@ void NewMapFromImageDialog::createMapFromMatch()
             this,
             QStringLiteral("Map Creation Failed"),
             QStringLiteral("Porymap could not create the map. Check the application log for details.")
+        );
+        return;
+    }
+
+    m_project->newMapSettings = settings;
+    QDialog::accept();
+}
+
+void NewMapFromImageDialog::createMapWithGeneratedTileset()
+{
+    runAnalysis();
+    if (!m_tilesetBuildResult.isValid()) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("Cannot Create Tileset"),
+            QStringLiteral("Run analysis and resolve any reported capacity or image errors first.")
+        );
+        return;
+    }
+
+    const QString mapName = m_mapName->text().trimmed();
+    const QString mapGroup = m_mapGroup->currentText().trimmed();
+    const QString tilesetName = m_newTilesetName->text().trimmed();
+    const QString tilesetPrefix =
+        projectConfig.getIdentifier(ProjectIdentifier::symbol_tilesets_prefix);
+    if (mapName.isEmpty() || !m_project->isValidNewIdentifier(mapName)) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("Cannot Create Map"),
+            QString("Map name '%1' must be a valid, unused identifier.").arg(mapName)
+        );
+        return;
+    }
+    if (mapGroup.isEmpty()
+        || (!m_project->groupNames.contains(mapGroup)
+            && !m_project->isValidNewIdentifier(mapGroup))) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("Cannot Create Map"),
+            QString("Map group '%1' must be an existing group or a valid, unused identifier.")
+                .arg(mapGroup)
+        );
+        return;
+    }
+    if (!tilesetName.startsWith(tilesetPrefix)
+        || !m_project->isValidNewIdentifier(tilesetName)) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("Cannot Create Tileset"),
+            QString("Tileset name '%1' must begin with '%2' and be a valid, unused identifier.")
+                .arg(tilesetName, tilesetPrefix)
+        );
+        return;
+    }
+
+    const QString layoutId = Layout::layoutConstantFromName(mapName);
+    if (!m_project->isValidNewIdentifier(layoutId)) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("Cannot Create Map"),
+            QString("Layout ID '%1' is already in use or invalid. Choose another map name.")
+                .arg(layoutId)
+        );
+        return;
+    }
+
+    const bool secondary = m_newTilesetType->currentIndex() == 1;
+    const QString pairedTilesetLabel = secondary
+        ? m_primaryTileset->currentText()
+        : m_secondaryTileset->currentText();
+    Tileset *pairedTileset = m_project->getTileset(pairedTilesetLabel);
+    if (!pairedTileset) {
+        QMessageBox::warning(
+            this,
+            QStringLiteral("Cannot Create Tileset"),
+            QStringLiteral("The paired tileset is no longer available. Run analysis again.")
+        );
+        return;
+    }
+
+    const QSize mapSize = m_tilesetBuildResult.mapSize;
+    Blockdata importedBlockdata;
+    importedBlockdata.reserve(m_tilesetBuildResult.mapMetatileIds.size());
+    for (uint16_t metatileId : m_tilesetBuildResult.mapMetatileIds) {
+        importedBlockdata.append(Block(metatileId, 0, 0));
+    }
+    if (!reviewCollisionSuggestions(&importedBlockdata, mapSize)) {
+        return;
+    }
+
+    const auto confirmation = QMessageBox::question(
+        this,
+        QStringLiteral("Create Tileset and Map From Image"),
+        QString(
+            "Create %1 tileset '%2' with %3 unique tiles and %4 unique metatiles, "
+            "then create map '%5' in group '%6'?\n\n"
+            "The tileset graphics, palettes, metatiles, attributes, and project declarations "
+            "will be written immediately. Save the new map before building the ROM."
+        ).arg(secondary ? QStringLiteral("secondary") : QStringLiteral("primary"))
+         .arg(tilesetName)
+         .arg(m_tilesetBuildResult.uniqueTileCount)
+         .arg(m_tilesetBuildResult.uniqueMetatileCount)
+         .arg(mapName, mapGroup),
+        QMessageBox::Yes | QMessageBox::Cancel,
+        QMessageBox::Cancel
+    );
+    if (confirmation != QMessageBox::Yes) return;
+
+    Tileset *generatedTileset = m_project->createNewTileset(
+        tilesetName,
+        secondary,
+        false,
+        [this, secondary](Tileset *tileset) {
+            QImage tilesImage = m_tilesetBuildResult.tilesImage;
+            if (!tileset->loadTilesImage(&tilesImage)) return false;
+
+            QList<Metatile *> generatedMetatiles;
+            generatedMetatiles.reserve(m_tilesetBuildResult.metatiles.size());
+            for (const Metatile &metatile : m_tilesetBuildResult.metatiles) {
+                generatedMetatiles.append(new Metatile(metatile));
+            }
+            tileset->setMetatiles(generatedMetatiles);
+
+            const int paletteId = secondary ? Project::getNumPalettesPrimary() : 0;
+            if (paletteId < 0
+                || paletteId >= tileset->palettes.size()
+                || paletteId >= tileset->palettePreviews.size()) {
+                return false;
+            }
+            tileset->palettes[paletteId] = m_tilesetBuildResult.palette;
+            tileset->palettePreviews[paletteId] = m_tilesetBuildResult.palette;
+            return true;
+        }
+    );
+    if (!generatedTileset) {
+        QMessageBox::critical(
+            this,
+            QStringLiteral("Tileset Creation Failed"),
+            QStringLiteral(
+                "Porymap could not create and save the generated tileset. "
+                "It was not registered in the project; check the application log for rollback details."
+            )
+        );
+        return;
+    }
+
+    Project::NewMapSettings settings = m_project->newMapSettings;
+    settings.name = mapName;
+    settings.group = mapGroup;
+    settings.canFlyTo = false;
+    settings.layout.id = layoutId;
+    settings.layout.name = m_project->toUniqueIdentifier(mapName + QStringLiteral("_Layout"));
+    settings.layout.folderName = mapName;
+    settings.layout.width = mapSize.width();
+    settings.layout.height = mapSize.height();
+    settings.layout.primaryTilesetLabel = secondary ? pairedTilesetLabel : tilesetName;
+    settings.layout.secondaryTilesetLabel = secondary ? tilesetName : pairedTilesetLabel;
+
+    Map *map = m_project->createNewMap(settings, importedBlockdata);
+    if (!map) {
+        QMessageBox::critical(
+            this,
+            QStringLiteral("Map Creation Failed"),
+            QStringLiteral(
+                "The generated tileset was saved, but Porymap could not create the map. "
+                "You can still select the new tileset from the standard New Map dialog."
+            )
         );
         return;
     }
@@ -1122,9 +1411,42 @@ void NewMapFromImageDialog::updateDimensionControls()
     m_mapHeight->setEnabled(!automatic);
 }
 
+void NewMapFromImageDialog::updateTilesetSourceControls()
+{
+    const bool generated = m_createTilesetFromImage->isChecked();
+    const bool secondary = m_newTilesetType->currentIndex() == 1;
+    m_newTilesetName->setEnabled(generated);
+    m_newTilesetType->setEnabled(generated);
+    m_newTilesetHelp->setEnabled(generated);
+    m_primaryTileset->setEnabled(!generated || secondary);
+    m_secondaryTileset->setEnabled(!generated || !secondary);
+    m_fuzzyMatchButton->setVisible(!generated);
+    m_reviewUnmatchedButton->setVisible(!generated);
+}
+
+ImageTilesetBuilder::Options NewMapFromImageDialog::tilesetBuildOptions(bool secondary) const
+{
+    ImageTilesetBuilder::Options options;
+    options.maxTiles = secondary
+        ? Project::getNumTilesSecondary()
+        : Project::getNumTilesPrimary();
+    options.maxMetatiles = secondary
+        ? Project::getNumMetatilesSecondary()
+        : Project::getNumMetatilesPrimary();
+    options.tileIdBase = secondary ? Project::getNumTilesPrimary() : 0;
+    options.metatileIdBase = secondary ? Project::getNumMetatilesPrimary() : 0;
+    options.paletteId = secondary ? Project::getNumPalettesPrimary() : 0;
+    options.tilesPerMetatile = projectConfig.getNumTilesInMetatile();
+    return options;
+}
+
 void NewMapFromImageDialog::updateCreateButton()
 {
-    m_createMapButton->setEnabled(allCellsResolved());
+    m_createMapButton->setEnabled(
+        m_createTilesetFromImage->isChecked()
+            ? m_tilesetBuildResult.isValid()
+            : allCellsResolved()
+    );
 }
 
 int NewMapFromImageDialog::cellIndex(const ImageMetatileMatcher::CellResult &cell) const

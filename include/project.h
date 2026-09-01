@@ -17,6 +17,8 @@
 #include <QVariant>
 #include <QFileSystemWatcher>
 
+#include <functional>
+
 class Project : public QObject
 {
     Q_OBJECT
@@ -142,6 +144,12 @@ public:
     Layout *createNewLayout(const Layout::Settings &layoutSettings, const Layout* toDuplicate = nullptr,
                             bool emitCreatedSignal = true);
     Tileset *createNewTileset(QString name, bool secondary, bool checkerboardFill);
+    Tileset *createNewTileset(
+        QString name,
+        bool secondary,
+        bool checkerboardFill,
+        const std::function<bool(Tileset *)> &configureBeforeSave
+    );
     bool isIdentifierUnique(const QString &identifier) const;
     bool isValidNewIdentifier(const QString &identifier) const;
     QString toUniqueIdentifier(const QString &identifier) const;

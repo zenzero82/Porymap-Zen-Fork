@@ -74,6 +74,12 @@ qmake tests/studio/imagemetatilematcher_test.pro -o "$matcher_test_build_dir/Mak
 make -C "$matcher_test_build_dir" -j"${JOBS:-$(nproc)}"
 "$matcher_test_build_dir/imagemetatilematcher_test"
 
+tileset_builder_test_build_dir="build/tests/tileset-builder"
+mkdir -p "$tileset_builder_test_build_dir"
+qmake tests/studio/imagetilesetbuilder_test.pro -o "$tileset_builder_test_build_dir/Makefile"
+make -C "$tileset_builder_test_build_dir" -j"${JOBS:-$(nproc)}"
+"$tileset_builder_test_build_dir/imagetilesetbuilder_test"
+
 porytiles_test_build_dir="build/tests/porytiles"
 mkdir -p "$porytiles_test_build_dir"
 qmake tests/studio/porytilesprocess_test.pro -o "$porytiles_test_build_dir/Makefile"

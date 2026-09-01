@@ -18,6 +18,9 @@ Current and planned feature areas:
   layer splitting, tile/color budget checks, and Porytiles source generation.
 - `ArtworkSourceDialog` — primary/secondary source preview and handoff to the
   existing safe Porytiles compile flow.
+- `ImageTilesetBuilder` — deterministic one-palette quantization, transparent
+  tile reservation, 8×8 tile and 16×16 metatile deduplication, native ID
+  assignment, and role-capacity validation for direct map-image import.
 - `SmartCollisionSuggester` — pure, deterministic per-cell collision/elevation
   proposals with confidence and explanations for imported terrain.
 - `TerrainRuleService` — validated, data-driven marching-squares resolution
@@ -41,6 +44,7 @@ Studio modules should:
 4. isolate expansion-specific behavior behind compatibility checks; and
 5. preserve the Gen 3 project formats already handled by Porymap.
 
-The Phase 1 dialog intentionally stops at **READY FOR MATCHING**. It must not
-create maps or layouts, write image data into a project, run matching, or
-modify tilesets/collision data.
+The New Map From Image dialog keeps matching and direct generation as explicit
+separate modes. Matching never mutates tilesets. Direct generation validates
+the complete result first, then uses Project's checked native tileset creation
+and standard map/layout paths.

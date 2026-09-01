@@ -5,6 +5,7 @@
 
 #include "studio/imagemetatilematcher.h"
 #include "studio/imagemetatileapproval.h"
+#include "studio/imagetilesetbuilder.h"
 #include "studio/mapimageanalyzer.h"
 #include "studio/metatilerenderservice.h"
 #include "studio/smartcollisionsuggester.h"
@@ -46,6 +47,8 @@ private:
     MetatileRenderService::Result m_renderResult;
     ImageMetatileMatcher m_matcher;
     ImageMetatileMatcher::Result m_matchResult;
+    ImageTilesetBuilder m_tilesetBuilder;
+    ImageTilesetBuilder::Result m_tilesetBuildResult;
     QImage m_analysisReconstructedImage;
     QImage m_analysisDifferenceImage;
 
@@ -65,6 +68,10 @@ private:
     QComboBox *m_mapGroup = nullptr;
     QComboBox *m_primaryTileset = nullptr;
     QComboBox *m_secondaryTileset = nullptr;
+    QCheckBox *m_createTilesetFromImage = nullptr;
+    QLineEdit *m_newTilesetName = nullptr;
+    QComboBox *m_newTilesetType = nullptr;
+    QLabel *m_newTilesetHelp = nullptr;
     QCheckBox *m_autoDimensions = nullptr;
     QSpinBox *m_mapWidth = nullptr;
     QSpinBox *m_mapHeight = nullptr;
@@ -94,10 +101,13 @@ private:
     void runFuzzyMatching();
     void updateMatchDisplay();
     void createMapFromMatch();
+    void createMapWithGeneratedTileset();
     void reviewUnmatched();
     void exportDebugMetatiles();
     void updateDimensionControls();
     void updateCreateButton();
+    void updateTilesetSourceControls();
+    ImageTilesetBuilder::Options tilesetBuildOptions(bool secondary) const;
     int cellIndex(const ImageMetatileMatcher::CellResult &cell) const;
     const MetatileRenderService::RenderedMetatile *findRenderedCandidate(
         const ImageMetatileMatcher::CandidateResult &candidate) const;

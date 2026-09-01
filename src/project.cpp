@@ -19,6 +19,7 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QFile>
+#include <QSaveFile>
 #include <QTextStream>
 #include <QStandardItem>
 #include <QMessageBox>
@@ -1628,6 +1629,15 @@ void Project::readTilesetPaths(Tileset* tileset) {
 }
 
 Tileset *Project::createNewTileset(QString name, bool secondary, bool checkerboardFill) {
+    return createNewTileset(name, secondary, checkerboardFill, {});
+}
+
+Tileset *Project::createNewTileset(
+    QString name,
+    bool secondary,
+    bool checkerboardFill,
+    const std::function<bool(Tileset *)> &configureBeforeSave)
+{
     const QString prefix = projectConfig.getIdentifier(ProjectIdentifier::symbol_tilesets_prefix);
     if (!name.startsWith(prefix)) {
         logError(QString("Tileset name '%1' doesn't begin with the prefix '%2'.").arg(name).arg(prefix));
@@ -1641,11 +1651,29 @@ Tileset *Project::createNewTileset(QString name, bool secondary, bool checkerboa
     // Create tileset directories
     const QString fullDirectoryPath = QString("%1/%2").arg(this->root).arg(tileset->getExpectedDir());
     const QString palettesPath = fullDirectoryPath + "/palettes";
+    if (QFileInfo::exists(fullDirectoryPath)) {
+        logError(QString(
+            "Failed to create tileset '%1': directory '%2' already exists."
+        ).arg(tileset->name, fullDirectoryPath));
+        delete tileset;
+        return nullptr;
+    }
+    const auto cleanupNewTilesetDirectory = [&fullDirectoryPath]() {
+        QDir directory(fullDirectoryPath);
+        if (directory.exists() && !directory.removeRecursively()) {
+            logError(QString(
+                "Failed to remove incomplete tileset directory '%1'. Manual cleanup may be required."
+            ).arg(fullDirectoryPath));
+            return false;
+        }
+        return true;
+    };
     for (const auto& dir : {fullDirectoryPath, palettesPath}) {
         QString error = Util::mkpath(dir);
         if (!error.isEmpty()) {
             logError(QString("Failed to create tileset '%1': %2.").arg(tileset->name).arg(error));
             delete tileset;
+            cleanupNewTilesetDirectory();
             return nullptr;
         }
     }
@@ -1692,19 +1720,13 @@ Tileset *Project::createNewTileset(QString name, bool secondary, bool checkerboa
     tileset->palettes[0][1] = qRgb(255,0,255);
     tileset->palettePreviews[0][1] = qRgb(255,0,255);
 
-    // Update tileset label arrays
-    QStringList *labelList = tileset->is_secondary ? &this->secondaryTilesetLabels : &this->primaryTilesetLabels;
-    int i = 0;
-    for (; i < labelList->length(); i++) {
-        if (labelList->at(i) > tileset->name) {
-            break;
-        }
+    if (configureBeforeSave && !configureBeforeSave(tileset)) {
+        logError(QString("Failed to configure generated data for tileset '%1'.").arg(tileset->name));
+        delete tileset;
+        cleanupNewTilesetDirectory();
+        return nullptr;
     }
-    labelList->insert(i, tileset->name);
-    this->tilesetLabelsOrdered.append(tileset->name);
 
-    // Append to tileset specific files.
-    // TODO: Ideally we wouldn't save new Tilesets immediately
     QString headersFilepath = this->root + "/";
     QString graphicsFilepath = this->root + "/";
     QString metatilesFilepath = this->root + "/";
@@ -1717,13 +1739,83 @@ Tileset *Project::createNewTileset(QString name, bool secondary, bool checkerboa
         graphicsFilepath.append(projectConfig.getFilePath(ProjectFilePath::tilesets_graphics));
         metatilesFilepath.append(projectConfig.getFilePath(ProjectFilePath::tilesets_metatiles));
     }
+    for (const QString &path : {headersFilepath, graphicsFilepath, metatilesFilepath}) {
+        const QFileInfo fileInfo(path);
+        if (!fileInfo.exists() || !fileInfo.isFile() || !fileInfo.isWritable()) {
+            logError(QString("Cannot update tileset declaration file '%1'.").arg(path));
+            delete tileset;
+            cleanupNewTilesetDirectory();
+            return nullptr;
+        }
+    }
+
+    // Save final assets before adding any project declarations. If this fails,
+    // removal of the newly-created directory returns the project to its prior state.
+    if (!tileset->save()) {
+        logError(QString("Failed to save assets for new tileset '%1'.").arg(tileset->name));
+        delete tileset;
+        cleanupNewTilesetDirectory();
+        return nullptr;
+    }
+
+    QMap<QString, QByteArray> originalDeclarations;
+    for (const QString &path : {headersFilepath, graphicsFilepath, metatilesFilepath}) {
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly)) {
+            logError(QString("Cannot snapshot tileset declaration file '%1': %2")
+                         .arg(path, file.errorString()));
+            delete tileset;
+            cleanupNewTilesetDirectory();
+            return nullptr;
+        }
+        originalDeclarations.insert(path, file.readAll());
+    }
+    const auto restoreDeclarations = [&originalDeclarations]() {
+        bool restored = true;
+        for (auto it = originalDeclarations.cbegin(); it != originalDeclarations.cend(); ++it) {
+            QSaveFile file(it.key());
+            if (!file.open(QIODevice::WriteOnly)
+                || file.write(it.value()) != it.value().size()
+                || !file.commit()) {
+                restored = false;
+                logError(QString(
+                    "Failed to atomically restore tileset declaration file '%1'."
+                ).arg(it.key()));
+            }
+        }
+        return restored;
+    };
+
     ignoreWatchedFilesTemporarily({headersFilepath, graphicsFilepath, metatilesFilepath});
     QString baseName = Tileset::stripPrefix(name);
-    tileset->appendToHeaders(headersFilepath, baseName, this->usingAsmTilesets);
-    tileset->appendToGraphics(graphicsFilepath, baseName, this->usingAsmTilesets);
-    tileset->appendToMetatiles(metatilesFilepath, baseName, this->usingAsmTilesets);
+    const bool declarationsSaved =
+        tileset->appendToHeaders(headersFilepath, baseName, this->usingAsmTilesets)
+        && tileset->appendToGraphics(graphicsFilepath, baseName, this->usingAsmTilesets)
+        && tileset->appendToMetatiles(metatilesFilepath, baseName, this->usingAsmTilesets);
+    if (!declarationsSaved) {
+        const bool declarationsRestored = restoreDeclarations();
+        delete tileset;
+        if (declarationsRestored) {
+            cleanupNewTilesetDirectory();
+        } else {
+            logError(QString(
+                "Declaration rollback for tileset '%1' was incomplete. Complete generated assets "
+                "were preserved at '%2' for recovery; manual declaration repair is required."
+            ).arg(name, fullDirectoryPath));
+        }
+        return nullptr;
+    }
 
-    tileset->save();
+    // Only expose the tileset after all files and declarations are complete.
+    QStringList *labelList = tileset->is_secondary ? &this->secondaryTilesetLabels : &this->primaryTilesetLabels;
+    int i = 0;
+    for (; i < labelList->length(); i++) {
+        if (labelList->at(i) > tileset->name) {
+            break;
+        }
+    }
+    labelList->insert(i, tileset->name);
+    this->tilesetLabelsOrdered.append(tileset->name);
 
     cacheTileset(tileset->name, tileset);
     emit tilesetCreated(tileset);

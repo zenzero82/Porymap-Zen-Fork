@@ -145,6 +145,24 @@ compatible with future upstream merges.
 - Bound requests and responses, support cancellation/timeouts, disable
   redirects, and allow bearer tokens only through an environment-variable name.
 
+## Milestone 13 — Direct map-image tileset creation
+
+**Status: complete.**
+
+- Extend New Map From Image with an explicit generated-tileset mode while
+  preserving the existing match-against-current-tilesets workflow.
+- Deterministically reduce source artwork to one native 16-entry palette with
+  transparent index zero, deduplicate 8×8 tiles and 16×16 metatiles, and pad
+  unused project layers with a reserved transparent tile.
+- Generate either a primary or secondary tileset, pair it with the selected
+  existing opposite role, and create row-major native map blockdata.
+- Validate map dimensions and role-specific tile/metatile capacity before any
+  project mutation.
+- Save final native tileset assets before project declarations, verify every
+  declaration write, and roll back failed creation before registration.
+- Preserve collision/elevation review and require the normal map save before
+  ROM build/test.
+
 ## Ongoing compatibility requirements
 
 - Preserve `pokeruby`, `pokeemerald`, and `pokefirered` support where practical.

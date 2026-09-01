@@ -341,8 +341,12 @@ bool Tileset::appendToHeaders(const QString &filepath, const QString &friendlyNa
         if (projectConfig.tilesetsHaveCallback) dataString.append("    .callback = NULL,\n");
         dataString.append("};\n");
     }
-    file.write(dataString.toUtf8());
-    file.flush();
+    const QByteArray data = dataString.toUtf8();
+    if (file.write(data) != data.size() || !file.flush()) {
+        logError(QString("Could not completely write to file \"%1\": %2").arg(filepath, file.errorString()));
+        file.close();
+        return false;
+    }
     file.close();
     return true;
 }
@@ -377,8 +381,12 @@ bool Tileset::appendToGraphics(const QString &filepath, const QString &friendlyN
         dataString.append("};\n");
         dataString.append(QString("\nconst u32 gTilesetTiles_%1[] = INCBIN_U32(\"%2\");\n").arg(friendlyName, tilesPath));
     }
-    file.write(dataString.toUtf8());
-    file.flush();
+    const QByteArray data = dataString.toUtf8();
+    if (file.write(data) != data.size() || !file.flush()) {
+        logError(QString("Could not completely write to file \"%1\": %2").arg(filepath, file.errorString()));
+        file.close();
+        return false;
+    }
     file.close();
     return true;
 }
@@ -409,8 +417,12 @@ bool Tileset::appendToMetatiles(const QString &filepath, const QString &friendly
         QString numBits = QString::number(projectConfig.metatileAttributesSize * 8);
         dataString.append(QString("const u%1 gMetatileAttributes_%2[] = INCBIN_U%1(\"%3\");\n").arg(numBits, friendlyName, metatileAttrsPath));
     }
-    file.write(dataString.toUtf8());
-    file.flush();
+    const QByteArray data = dataString.toUtf8();
+    if (file.write(data) != data.size() || !file.flush()) {
+        logError(QString("Could not completely write to file \"%1\": %2").arg(filepath, file.errorString()));
+        file.close();
+        return false;
+    }
     file.close();
     return true;
 }

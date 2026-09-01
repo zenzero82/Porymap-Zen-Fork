@@ -2,3 +2,4 @@
 - [Windows Qt CI toolchain](windows-qt-ci-toolchain.md) — Qt MinGW builds must use the matching Qt-provided compiler, not the GitHub runner default.
 - [GitHub REST history reconciliation](github-rest-history-reconciliation.md) — repos populated through API commits need explicit local-history reconciliation before normal Git sync.
 - [Replit build validation isolation](replit-build-validation-isolation.md) — keep native build validation detached from desktop Run to avoid concurrent compiles.
+- [Image tileset creation transactions](image-tileset-creation-transactions.md) — save final assets and checked declarations before exposing a generated tileset.
