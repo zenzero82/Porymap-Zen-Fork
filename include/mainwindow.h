@@ -219,6 +219,7 @@ private slots:
     void markLayoutEdited();
 
     void on_actionNew_Tileset_triggered();
+    void openNewTilesetFromAssetsDialog();
     void openNewMapFromImageDialog();
     void openRomBuildDialog();
     void openAiAssistantDialog();

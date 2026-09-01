@@ -21,6 +21,9 @@ Current and planned feature areas:
 - `ImageTilesetBuilder` — deterministic one-palette quantization, transparent
   tile reservation, 8×8 tile and 16×16 metatile deduplication, native ID
   assignment, and role-capacity validation for direct map-image import.
+- `AssetTilesetBuilder` / `AssetTilesetDialog` — multi-file or recursive-folder
+  graphics import, 8×8 padding and packing, deduplication, native tileset
+  creation, and optional primary/secondary overflow splitting.
 - `SmartCollisionSuggester` — pure, deterministic per-cell collision/elevation
   proposals with confidence and explanations for imported terrain.
 - `TerrainRuleService` — validated, data-driven marching-squares resolution

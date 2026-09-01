@@ -26,6 +26,7 @@
 #include "resizelayoutpopup.h"
 #include "newmapdialog.h"
 #include "newtilesetdialog.h"
+#include "studio/assettilesetdialog.h"
 #include "newmapgroupdialog.h"
 #include "newlocationdialog.h"
 #include "loadingscreen.h"
@@ -392,6 +393,7 @@ void MainWindow::initExtraSignals() {
 
     connect(ui->action_NewMap, &QAction::triggered, this, &MainWindow::openNewMapDialog);
     connect(ui->action_NewMapFromImage, &QAction::triggered, this, &MainWindow::openNewMapFromImageDialog);
+    connect(ui->action_NewTilesetFromAssets, &QAction::triggered, this, &MainWindow::openNewTilesetFromAssetsDialog);
     connect(ui->action_Build_ROM, &QAction::triggered, this, &MainWindow::openRomBuildDialog);
     connect(ui->action_AI_Assistant, &QAction::triggered, this, &MainWindow::openAiAssistantDialog);
     connect(ui->action_NewLayout, &QAction::triggered, this, &MainWindow::openNewLayoutDialog);
@@ -1877,6 +1879,17 @@ void MainWindow::on_actionNew_Tileset_triggered() {
         // Unlike creating a new map or layout (which immediately opens the new item)
         // creating a new tileset has no visual feedback that it succeeded, so we show a message.
         // It's important that we do this after the dialog has closed (sheet modal dialogs on macOS don't seem to play nice together).
+        InfoMessage::show(QString("New tileset created at '%1'!").arg(tileset->getExpectedDir()), this);
+    });
+    dialog->open();
+}
+
+void MainWindow::openNewTilesetFromAssetsDialog() {
+    if (!this->editor->project) {
+        return;
+    }
+    auto dialog = new Studio::AssetTilesetDialog(this->editor->project, this);
+    connect(dialog, &Studio::AssetTilesetDialog::applied, [this](Tileset *tileset) {
         InfoMessage::show(QString("New tileset created at '%1'!").arg(tileset->getExpectedDir()), this);
     });
     dialog->open();

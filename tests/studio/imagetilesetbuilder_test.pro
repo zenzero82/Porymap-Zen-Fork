@@ -14,7 +14,9 @@ INCLUDEPATH += \
 
 SOURCES += \
     $$PWD/imagetilesetbuilder_test.cpp \
+    $$PWD/../../src/studio/assettilesetbuilder.cpp \
     $$PWD/../../src/studio/imagetilesetbuilder.cpp
 
 HEADERS += \
+    $$PWD/../../include/studio/assettilesetbuilder.h \
     $$PWD/../../include/studio/imagetilesetbuilder.h

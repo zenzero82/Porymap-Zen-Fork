@@ -161,6 +161,8 @@ SOURCES += src/core/advancemapparser.cpp \
     src/studio/imagemetatilematcher.cpp \
     src/studio/imagemetatileapproval.cpp \
     src/studio/imagetilesetbuilder.cpp \
+    src/studio/assettilesetbuilder.cpp \
+    src/studio/assettilesetdialog.cpp \
     src/studio/porytilesdialog.cpp \
     src/studio/porytilesprocess.cpp \
     src/studio/rombuildprocess.cpp \
@@ -301,6 +303,8 @@ HEADERS  += include/core/advancemapparser.h \
     include/studio/imagemetatilematcher.h \
     include/studio/imagemetatileapproval.h \
     include/studio/imagetilesetbuilder.h \
+    include/studio/assettilesetbuilder.h \
+    include/studio/assettilesetdialog.h \
     include/studio/porytilesdialog.h \
     include/studio/porytilesprocess.h \
     include/studio/rombuildprocess.h \

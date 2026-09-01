@@ -1,6 +1,8 @@
 #include "studio/imagetilesetbuilder.h"
+#include "studio/assettilesetbuilder.h"
 
 #include <QImage>
+#include <QTemporaryDir>
 
 #include <iostream>
 
@@ -157,6 +159,26 @@ void testSplitsOverflowAcrossBothRoles()
            "map cells should reference their assigned tileset role");
 }
 
+void testPackagesMixedAssetSizes()
+{
+    QTemporaryDir directory;
+    expect(directory.isValid(), "temporary asset directory should be available");
+    QImage singleTile(8, 8, QImage::Format_ARGB32);
+    singleTile.fill(qRgb(255, 0, 0));
+    QImage paddedAsset(9, 9, QImage::Format_ARGB32);
+    paddedAsset.fill(qRgb(0, 255, 0));
+    const QString singlePath = directory.filePath(QStringLiteral("single.png"));
+    const QString paddedPath = directory.filePath(QStringLiteral("padded.png"));
+    expect(singleTile.save(singlePath), "single tile fixture should save");
+    expect(paddedAsset.save(paddedPath), "padded fixture should save");
+
+    Studio::AssetTilesetBuilder builder;
+    const auto result = builder.build({singlePath, paddedPath}, options());
+    expect(result.isValid(), "mixed-size image assets should package");
+    expect(result.sourceTileCount == 5, "asset dimensions should be padded to 8x8 tiles");
+    expect(result.tileset.uniqueTileCount >= 3, "transparent and visible asset tiles should be stored");
+}
+
 } // namespace
 
 int main()
@@ -167,6 +189,7 @@ int main()
     testTransparentPixelsUseIndexZero();
     testCapacityFailuresAreExplicit();
     testSplitsOverflowAcrossBothRoles();
+    testPackagesMixedAssetSizes();
 
     if (failures == 0) {
         std::cout << "All image tileset builder tests passed.\n";
