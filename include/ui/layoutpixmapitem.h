@@ -4,6 +4,7 @@
 #include "settings.h"
 #include "metatileselector.h"
 #include <QGraphicsPixmapItem>
+#include <QHash>
 
 class Layout;
 
@@ -85,6 +86,8 @@ public:
 
     void updateMetatileSelection(QGraphicsSceneMouseEvent *event);
     void paintNormal(int x, int y, bool fromScriptCall = false);
+    void setTerrainRuleMapping(const QHash<int, int> &maskToVariant);
+    void resetTerrainRuleMapping();
     void lockNondominantAxis(QGraphicsSceneMouseEvent *event);
     QPoint adjustCoords(QPoint pos);
 
@@ -94,11 +97,11 @@ protected:
 private:
     void paintSmartPath(int x, int y, bool fromScriptCall = false);
     static bool isValidSmartPathSelection(MetatileSelection selection);
-    static QList<int> smartPathTable;
     static constexpr int smartPathWidth = 3;
     static constexpr int smartPathHeight = 3;
     static constexpr int smartPathMiddleIndex = (smartPathWidth / 2) + ((smartPathHeight / 2) * smartPathWidth);
     QPoint lastMetatileSelectionPos = QPoint(-1,-1);
+    QHash<int, int> terrainRuleMapping;
 
 signals:
     void startPaint(QGraphicsSceneMouseEvent *, LayoutPixmapItem *);

@@ -111,9 +111,15 @@ compatible with future upstream merges.
 
 ## Milestone 10 — Terrain and autotile brushes
 
-- Define reusable terrain rules.
-- Paint connected terrain while preserving manual control.
-- Keep generic behavior separate from expansion-specific rules.
+**Status: complete.**
+
+- Extract the existing Smart Paths interaction into a reusable,
+  data-driven marching-squares terrain-rule service.
+- Use the same rule resolver for pencil and flood-fill connected terrain
+  painting.
+- Preserve manual selection, optional collision/elevation payloads, and one
+  undoable command per painting gesture.
+- Keep the rule engine independent of expansion-specific terrain constants.
 
 ## Milestone 11 — Build and test ROM integration
 

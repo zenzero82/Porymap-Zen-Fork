@@ -20,6 +20,8 @@ Current and planned feature areas:
   existing safe Porytiles compile flow.
 - `SmartCollisionSuggester` — pure, deterministic per-cell collision/elevation
   proposals with confidence and explanations for imported terrain.
+- `TerrainRuleService` — validated, data-driven marching-squares resolution
+  for connected terrain and autotile brushes.
 - `build/` — project build/test process orchestration.
 
 Create these subdirectories only when their first real implementation is added.

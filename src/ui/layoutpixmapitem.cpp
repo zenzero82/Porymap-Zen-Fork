@@ -1,4 +1,5 @@
 #include "layoutpixmapitem.h"
+#include "studio/terrainrules.h"
 #include "metatile.h"
 #include "log.h"
 #include "scripting.h"
@@ -144,28 +145,6 @@ void LayoutPixmapItem::paintNormal(int x, int y, bool fromScriptCall) {
     }
 }
 
-// These are tile offsets from the top-left tile in the 3x3 smart path selection.
-// Each entry is for one possibility from the marching squares value for a tile.
-// (Marching Squares: https://en.wikipedia.org/wiki/Marching_squares)
-QList<int> LayoutPixmapItem::smartPathTable = QList<int>({
-    4, // 0000
-    4, // 0001
-    4, // 0010
-    6, // 0011
-    4, // 0100
-    4, // 0101
-    0, // 0110
-    3, // 0111
-    4, // 1000
-    8, // 1001
-    4, // 1010
-    7, // 1011
-    2, // 1100
-    5, // 1101
-    1, // 1110
-    4, // 1111
-});
-
 #define IS_SMART_PATH_TILE(block) (selectedMetatiles->contains(block.metatileId))
 
 bool isSmartPathTile(QList<MetatileSelectionItem> metatileItems, uint16_t metatileId) {
@@ -192,9 +171,27 @@ bool LayoutPixmapItem::isValidSmartPathSelection(MetatileSelection selection) {
     return true;
 }
 
+void LayoutPixmapItem::setTerrainRuleMapping(const QHash<int, int> &maskToVariant)
+{
+    terrainRuleMapping = maskToVariant;
+}
+
+void LayoutPixmapItem::resetTerrainRuleMapping()
+{
+    terrainRuleMapping.clear();
+}
+
 void LayoutPixmapItem::paintSmartPath(int x, int y, bool fromScriptCall) {
     MetatileSelection selection = this->metatileSelector->getMetatileSelection();
     if (!isValidSmartPathSelection(selection))
+        return;
+    QList<uint16_t> variants;
+    for (const MetatileSelectionItem &item : selection.metatileItems)
+        variants.append(item.metatileId);
+    const Studio::TerrainRule terrainRule = terrainRuleMapping.isEmpty()
+        ? Studio::TerrainRuleService::marchingSquaresRule(variants)
+        : Studio::TerrainRuleService::customRule(variants, terrainRuleMapping);
+    if (!terrainRule.isValid())
         return;
 
     // Shift to the middle tile of the smart path selection.
@@ -263,9 +260,10 @@ void LayoutPixmapItem::paintSmartPath(int x, int y, bool fromScriptCall) {
         if (this->layout->getBlock(actualX - 1, actualY, &left) && isSmartPathTile(selection.metatileItems, left.metatileId()))
             id += 8;
 
-        block.setMetatileId(selection.metatileItems.at(smartPathTable[id]).metatileId);
+        const int variant = terrainRule.variantForMask(id);
+        block.setMetatileId(selection.metatileItems.at(variant).metatileId);
         if (setCollisions) {
-            CollisionSelectionItem collisionItem = selection.collisionItems.at(smartPathTable[id]);
+            CollisionSelectionItem collisionItem = selection.collisionItems.at(variant);
             block.setCollision(collisionItem.collision);
             block.setElevation(collisionItem.elevation);
         }
@@ -536,6 +534,14 @@ void LayoutPixmapItem::floodFillSmartPath(int initialX, int initialY, bool fromS
     MetatileSelection selection = this->metatileSelector->getMetatileSelection();
     if (!isValidSmartPathSelection(selection))
         return;
+    QList<uint16_t> variants;
+    for (const MetatileSelectionItem &item : selection.metatileItems)
+        variants.append(item.metatileId);
+    const Studio::TerrainRule terrainRule = terrainRuleMapping.isEmpty()
+        ? Studio::TerrainRuleService::marchingSquaresRule(variants)
+        : Studio::TerrainRuleService::customRule(variants, terrainRuleMapping);
+    if (!terrainRule.isValid())
+        return;
 
     // Shift to the middle tile of the smart path selection.
     uint16_t openMetatileId = selection.metatileItems.at(smartPathMiddleIndex).metatileId;
@@ -618,9 +624,10 @@ void LayoutPixmapItem::floodFillSmartPath(int initialX, int initialY, bool fromS
         if (this->layout->getBlock(x - 1, y, &left) && isSmartPathTile(selection.metatileItems, left.metatileId()))
             id += 8;
 
-        block.setMetatileId(selection.metatileItems.at(smartPathTable[id]).metatileId);
+        const int variant = terrainRule.variantForMask(id);
+        block.setMetatileId(selection.metatileItems.at(variant).metatileId);
         if (setCollisions) {
-            CollisionSelectionItem item = selection.collisionItems.at(smartPathTable[id]);
+            CollisionSelectionItem item = selection.collisionItems.at(variant);
             block.setCollision(item.collision);
             block.setElevation(item.elevation);
         }

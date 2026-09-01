@@ -294,6 +294,15 @@ Keep Defaults, or Cancel. Accepted values are set through `Block` setters and
 travel with the existing `ImportMetatiles` undo command. No project file is
 written by analysis or review.
 
+### Terrain and autotile brushes
+
+Smart Paths now resolves its 3×3 selection through a reusable
+`TerrainRuleService`. The default rule is a deterministic cardinal
+marching-squares mapping; callers can also provide a validated mask-to-variant
+map through the canvas item's active-rule seam. Pencil and flood-fill paths
+share the same injected mapping and current manual 3×3 variant selection, then
+commit through the existing paint undo commands.
+
 ### Implemented integration
 
 The Studio integration uses a subprocess adapter rather than linking or copying
