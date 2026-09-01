@@ -518,47 +518,79 @@ ImageTilesetBuilder::PairResult ImageTilesetBuilder::buildPair(
     primarySource.fill(Qt::transparent);
     secondarySource.fill(Qt::transparent);
     const QImage normalizedSource = sourceImage.convertToFormat(QImage::Format_ARGB32);
-    QVector<bool> secondaryAssignments;
-    secondaryAssignments.reserve(pair.mapSize.width() * pair.mapSize.height());
-
+    const int cellCount = pair.mapSize.width() * pair.mapSize.height();
+    QVector<CellData> cells;
+    QVector<QPoint> cellPositions;
+    cells.reserve(cellCount);
+    cellPositions.reserve(cellCount);
     for (int cellY = 0; cellY < pair.mapSize.height(); cellY++) {
         for (int cellX = 0; cellX < pair.mapSize.width(); cellX++) {
-            const CellData cell = cellDataAt(cellX, cellY);
-            const Projection primaryProjection = projectCell(primaryState, cell);
-            const Projection secondaryProjection = projectCell(secondaryState, cell);
-            if (!primaryProjection.fits && !secondaryProjection.fits) {
-                pair.errorMessage = QString(
-                    "The image cannot be split within the combined primary and secondary limits "
-                    "at map cell (%1, %2)."
-                ).arg(cellX).arg(cellY);
-                return pair;
-            }
+            cells.append(cellDataAt(cellX, cellY));
+            cellPositions.append(QPoint(cellX, cellY));
+        }
+    }
+    QVector<int> packingOrder;
+    packingOrder.reserve(cellCount);
+    for (int index = 0; index < cellCount; index++) packingOrder.append(index);
+    std::stable_sort(packingOrder.begin(), packingOrder.end(), [&cells](int left, int right) {
+        QHash<QByteArray, bool> leftKeys;
+        QHash<QByteArray, bool> rightKeys;
+        for (const QByteArray &key : cells.at(left).keys) leftKeys.insert(key, true);
+        for (const QByteArray &key : cells.at(right).keys) rightKeys.insert(key, true);
+        if (leftKeys.size() != rightKeys.size()) return leftKeys.size() > rightKeys.size();
+        return cells.at(left).keys.size() > cells.at(right).keys.size();
+    });
 
-            const bool useSecondary =
-                !primaryProjection.fits
-                || (secondaryProjection.fits
-                    && projectionScore(secondaryState, secondaryProjection)
-                        < projectionScore(primaryState, primaryProjection));
-            RoleState *state = useSecondary ? &secondaryState : &primaryState;
-            const Projection &projection =
-                useSecondary ? secondaryProjection : primaryProjection;
-            pair.mapMetatileIds.append(static_cast<uint16_t>(appendCell(state, cell, projection)));
-            secondaryAssignments.append(useSecondary);
+    pair.mapMetatileIds.resize(cellCount);
+    QVector<bool> secondaryAssignments(cellCount, false);
+    for (int cellIndex : packingOrder) {
+        const CellData &cell = cells.at(cellIndex);
+        const QPoint position = cellPositions.at(cellIndex);
+        const Projection primaryProjection = projectCell(primaryState, cell);
+        const Projection secondaryProjection = projectCell(secondaryState, cell);
+        if (!primaryProjection.fits && !secondaryProjection.fits) {
+            pair.errorMessage = QString(
+                "The image cannot be split within the combined primary and secondary limits "
+                "at map cell (%1, %2). Primary is using %3/%4 tiles and %5/%6 metatiles; "
+                "secondary is using %7/%8 tiles and %9/%10 metatiles."
+            ).arg(position.x())
+             .arg(position.y())
+             .arg(primaryState.tiles.size())
+             .arg(primaryState.options.maxTiles)
+             .arg(primaryState.metatileIndices.size())
+             .arg(primaryState.options.maxMetatiles)
+             .arg(secondaryState.tiles.size())
+             .arg(secondaryState.options.maxTiles)
+             .arg(secondaryState.metatileIndices.size())
+             .arg(secondaryState.options.maxMetatiles);
+            return pair;
+        }
 
-            QImage *roleSource = useSecondary ? &secondarySource : &primarySource;
-            const QRect cellRect(
-                cellX * Metatile::pixelWidth(),
-                cellY * Metatile::pixelHeight(),
-                Metatile::pixelWidth(),
-                Metatile::pixelHeight()
+        const bool useSecondary =
+            !primaryProjection.fits
+            || (secondaryProjection.fits
+                && projectionScore(secondaryState, secondaryProjection)
+                    < projectionScore(primaryState, primaryProjection));
+        RoleState *state = useSecondary ? &secondaryState : &primaryState;
+        const Projection &projection =
+            useSecondary ? secondaryProjection : primaryProjection;
+        pair.mapMetatileIds[cellIndex] =
+            static_cast<uint16_t>(appendCell(state, cell, projection));
+        secondaryAssignments[cellIndex] = useSecondary;
+
+        QImage *roleSource = useSecondary ? &secondarySource : &primarySource;
+        const QRect cellRect(
+            position.x() * Metatile::pixelWidth(),
+            position.y() * Metatile::pixelHeight(),
+            Metatile::pixelWidth(),
+            Metatile::pixelHeight()
+        );
+        for (int y = 0; y < cellRect.height(); y++) {
+            memcpy(
+                roleSource->scanLine(cellRect.y() + y) + cellRect.x() * 4,
+                normalizedSource.constScanLine(cellRect.y() + y) + cellRect.x() * 4,
+                cellRect.width() * 4
             );
-            for (int y = 0; y < cellRect.height(); y++) {
-                memcpy(
-                    roleSource->scanLine(cellRect.y() + y) + cellRect.x() * 4,
-                    normalizedSource.constScanLine(cellRect.y() + y) + cellRect.x() * 4,
-                    cellRect.width() * 4
-                );
-            }
         }
     }
 
