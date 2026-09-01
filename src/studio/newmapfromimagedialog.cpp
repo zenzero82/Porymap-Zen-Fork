@@ -52,9 +52,14 @@ NewMapFromImageDialog::NewMapFromImageDialog(
     setMinimumSize(860, 650);
 
     auto *mainLayout = new QVBoxLayout(this);
+    mainLayout->setContentsMargins(14, 14, 14, 14);
+    mainLayout->setSpacing(10);
 
     auto *sourceGroup = new QGroupBox(QStringLiteral("Source Image"), this);
     auto *sourceLayout = new QGridLayout(sourceGroup);
+    sourceLayout->setContentsMargins(12, 12, 12, 12);
+    sourceLayout->setHorizontalSpacing(10);
+    sourceLayout->setVerticalSpacing(6);
     m_imagePath = new QLineEdit(sourceGroup);
     m_imagePath->setReadOnly(true);
     auto *browseButton = new QPushButton(QStringLiteral("Browse..."), sourceGroup);
@@ -68,6 +73,9 @@ NewMapFromImageDialog::NewMapFromImageDialog(
 
     auto *tilesetSourceGroup = new QGroupBox(QStringLiteral("Tileset Source"), this);
     auto *tilesetSourceLayout = new QFormLayout(tilesetSourceGroup);
+    tilesetSourceLayout->setContentsMargins(12, 12, 12, 12);
+    tilesetSourceLayout->setHorizontalSpacing(12);
+    tilesetSourceLayout->setVerticalSpacing(6);
     m_createTilesetFromImage = new QCheckBox(
         QStringLiteral("Build a new tileset from this image"),
         tilesetSourceGroup
@@ -96,7 +104,12 @@ NewMapFromImageDialog::NewMapFromImageDialog(
     mainLayout->addWidget(tilesetSourceGroup);
 
     auto *configurationGroup = new QGroupBox(QStringLiteral("Map Configuration"), this);
-    auto *configurationLayout = new QFormLayout(configurationGroup);
+    auto *configurationLayout = new QGridLayout(configurationGroup);
+    configurationLayout->setContentsMargins(12, 12, 12, 12);
+    configurationLayout->setHorizontalSpacing(18);
+    configurationLayout->setVerticalSpacing(0);
+    configurationLayout->setColumnStretch(0, 1);
+    configurationLayout->setColumnStretch(1, 1);
     m_mapName = new QLineEdit(configurationGroup);
     m_mapGroup = new QComboBox(configurationGroup);
     m_mapGroup->setEditable(true);
@@ -133,16 +146,28 @@ NewMapFromImageDialog::NewMapFromImageDialog(
     m_inferBlockedCollision->setChecked(Block::getMaxCollision() > 0);
     m_inferBlockedCollision->setToolTip(QStringLiteral(
         "Collision numbers are project-specific. Confirm that this value means blocked in the current project."));
-    configurationLayout->addRow(QStringLiteral("Map Name:"), m_mapName);
-    configurationLayout->addRow(QStringLiteral("Map Group:"), m_mapGroup);
-    configurationLayout->addRow(QStringLiteral("Primary Tileset:"), m_primaryTileset);
-    configurationLayout->addRow(QStringLiteral("Secondary Tileset:"), m_secondaryTileset);
-    configurationLayout->addRow(QString(), m_autoDimensions);
-    configurationLayout->addRow(QStringLiteral("Map Width:"), m_mapWidth);
-    configurationLayout->addRow(QStringLiteral("Map Height:"), m_mapHeight);
-    configurationLayout->addRow(QStringLiteral("Max Fuzzy Distance:"), m_maxFuzzyDistance);
-    configurationLayout->addRow(QStringLiteral("Minimum Confidence:"), m_minFuzzyConfidence);
-    configurationLayout->addRow(m_inferBlockedCollision, m_blockedCollision);
+    auto *mapDetailsLayout = new QFormLayout();
+    mapDetailsLayout->setHorizontalSpacing(12);
+    mapDetailsLayout->setVerticalSpacing(6);
+    mapDetailsLayout->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+    mapDetailsLayout->addRow(QStringLiteral("Map Name:"), m_mapName);
+    mapDetailsLayout->addRow(QStringLiteral("Map Group:"), m_mapGroup);
+    mapDetailsLayout->addRow(QStringLiteral("Primary Tileset:"), m_primaryTileset);
+    mapDetailsLayout->addRow(QStringLiteral("Secondary Tileset:"), m_secondaryTileset);
+    mapDetailsLayout->addRow(QString(), m_autoDimensions);
+    mapDetailsLayout->addRow(QStringLiteral("Map Width:"), m_mapWidth);
+    mapDetailsLayout->addRow(QStringLiteral("Map Height:"), m_mapHeight);
+
+    auto *analysisDetailsLayout = new QFormLayout();
+    analysisDetailsLayout->setHorizontalSpacing(12);
+    analysisDetailsLayout->setVerticalSpacing(6);
+    analysisDetailsLayout->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+    analysisDetailsLayout->addRow(QStringLiteral("Max Fuzzy Distance:"), m_maxFuzzyDistance);
+    analysisDetailsLayout->addRow(QStringLiteral("Minimum Confidence:"), m_minFuzzyConfidence);
+    analysisDetailsLayout->addRow(m_inferBlockedCollision, m_blockedCollision);
+
+    configurationLayout->addLayout(mapDetailsLayout, 0, 0);
+    configurationLayout->addLayout(analysisDetailsLayout, 0, 1);
     mainLayout->addWidget(configurationGroup);
 
     if (m_project) {
