@@ -277,6 +277,23 @@ for review, then requires explicit confirmation before passing the immutable
 package path to the existing staged Porytiles compile dialog. Secondary
 generation validates a complete paired primary source before creating output.
 
+### Smart collision and elevation assistance
+
+Collision and elevation are map-block fields, not Porytiles metatile
+attributes. Phase 9 therefore keeps these suggestions out of `attributes.csv`
+and runs them after image-to-metatile matching in New Map From Image.
+
+The UI-independent suggester examines each 16×16 terrain cell. Low opacity
+produces a high-confidence blocked suggestion; opaque cells remain walkable
+unless a fully opaque bright boundary provides a conservative raised-edge cue.
+Cells without reliable visual evidence retain collision/elevation zero and are
+marked low confidence. Every result includes an explanation.
+
+Users review all cells in a table and explicitly choose Apply Suggestions,
+Keep Defaults, or Cancel. Accepted values are set through `Block` setters and
+travel with the existing `ImportMetatiles` undo command. No project file is
+written by analysis or review.
+
 ### Implemented integration
 
 The Studio integration uses a subprocess adapter rather than linking or copying

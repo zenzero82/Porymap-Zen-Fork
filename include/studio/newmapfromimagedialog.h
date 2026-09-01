@@ -7,6 +7,7 @@
 #include "studio/imagemetatileapproval.h"
 #include "studio/mapimageanalyzer.h"
 #include "studio/metatilerenderservice.h"
+#include "studio/smartcollisionsuggester.h"
 
 class QCheckBox;
 class QComboBox;
@@ -17,6 +18,7 @@ class QPlainTextEdit;
 class QPushButton;
 class QScrollArea;
 class QSpinBox;
+class QTableWidget;
 class QTabWidget;
 class Project;
 
@@ -68,11 +70,17 @@ private:
     QSpinBox *m_mapHeight = nullptr;
     QSpinBox *m_maxFuzzyDistance = nullptr;
     QSpinBox *m_minFuzzyConfidence = nullptr;
+    QCheckBox *m_inferBlockedCollision = nullptr;
+    QSpinBox *m_blockedCollision = nullptr;
     QPlainTextEdit *m_analysisSummary = nullptr;
     QPushButton *m_analyzeButton = nullptr;
     QPushButton *m_fuzzyMatchButton = nullptr;
     QPushButton *m_createMapButton = nullptr;
     QPushButton *m_reviewUnmatchedButton = nullptr;
+    QPushButton *m_reviewCollisionButton = nullptr;
+    CollisionSuggestionResult m_collisionResult;
+    SmartCollisionSuggester m_collisionSuggester;
+    bool m_collisionSuggestionsApplied = false;
 #ifndef QT_NO_DEBUG
     QPushButton *m_debugExportButton = nullptr;
 #endif
@@ -98,6 +106,7 @@ private:
         const Correction &correction) const;
     bool allCellsResolved() const;
     void updateCorrectionPreviews();
+    bool reviewCollisionSuggestions(Blockdata *blockdata, const QSize &mapSize);
 };
 
 } // namespace Studio

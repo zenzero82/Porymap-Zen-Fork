@@ -5,6 +5,7 @@
 #include "metatile.h"
 #include "project.h"
 #include "tileset.h"
+#include "config.h"
 
 #include <QAbstractItemView>
 #include <QCheckBox>
@@ -28,6 +29,8 @@
 #include <QSignalBlocker>
 #include <QScrollArea>
 #include <QSpinBox>
+#include <QTableWidget>
+#include <QHeaderView>
 #include <QTabWidget>
 #include <QVBoxLayout>
 
@@ -75,6 +78,8 @@ NewMapFromImageDialog::NewMapFromImageDialog(
     m_mapHeight = new QSpinBox(configurationGroup);
     m_maxFuzzyDistance = new QSpinBox(configurationGroup);
     m_minFuzzyConfidence = new QSpinBox(configurationGroup);
+    m_inferBlockedCollision = new QCheckBox(QStringLiteral("Suggest blocked cells using collision value"), configurationGroup);
+    m_blockedCollision = new QSpinBox(configurationGroup);
     const int maxWidth = m_project ? qMax(1, m_project->getMaxMapWidth()) : 9999;
     const int maxHeight = m_project ? qMax(1, m_project->getMaxMapHeight()) : 9999;
     m_mapWidth->setRange(1, maxWidth);
@@ -93,6 +98,11 @@ NewMapFromImageDialog::NewMapFromImageDialog(
     m_minFuzzyConfidence->setToolTip(QStringLiteral(
         "Minimum confidence required to classify the best candidate as accepted."
     ));
+    m_blockedCollision->setRange(0, Block::getMaxCollision());
+    m_blockedCollision->setValue(qMin<int>(1, Block::getMaxCollision()));
+    m_inferBlockedCollision->setChecked(Block::getMaxCollision() > 0);
+    m_inferBlockedCollision->setToolTip(QStringLiteral(
+        "Collision numbers are project-specific. Confirm that this value means blocked in the current project."));
     configurationLayout->addRow(QStringLiteral("Map Name:"), m_mapName);
     configurationLayout->addRow(QStringLiteral("Map Group:"), m_mapGroup);
     configurationLayout->addRow(QStringLiteral("Primary Tileset:"), m_primaryTileset);
@@ -102,6 +112,7 @@ NewMapFromImageDialog::NewMapFromImageDialog(
     configurationLayout->addRow(QStringLiteral("Map Height:"), m_mapHeight);
     configurationLayout->addRow(QStringLiteral("Max Fuzzy Distance:"), m_maxFuzzyDistance);
     configurationLayout->addRow(QStringLiteral("Minimum Confidence:"), m_minFuzzyConfidence);
+    configurationLayout->addRow(m_inferBlockedCollision, m_blockedCollision);
     mainLayout->addWidget(configurationGroup);
 
     if (m_project) {
@@ -171,6 +182,8 @@ NewMapFromImageDialog::NewMapFromImageDialog(
     m_createMapButton->setEnabled(false);
     m_reviewUnmatchedButton = buttonBox->addButton(QStringLiteral("Review Corrections"), QDialogButtonBox::ActionRole);
     m_reviewUnmatchedButton->setEnabled(false);
+    m_reviewCollisionButton = buttonBox->addButton(QStringLiteral("Review Collision Suggestions"), QDialogButtonBox::ActionRole);
+    m_reviewCollisionButton->setEnabled(false);
 #ifndef QT_NO_DEBUG
     m_debugExportButton = buttonBox->addButton(QStringLiteral("Export Debug Metatiles..."), QDialogButtonBox::ActionRole);
     m_debugExportButton->setEnabled(false);
@@ -182,6 +195,9 @@ NewMapFromImageDialog::NewMapFromImageDialog(
     connect(m_fuzzyMatchButton, &QPushButton::clicked, this, &NewMapFromImageDialog::runFuzzyMatching);
     connect(m_createMapButton, &QPushButton::clicked, this, &NewMapFromImageDialog::createMapFromMatch);
     connect(m_reviewUnmatchedButton, &QPushButton::clicked, this, &NewMapFromImageDialog::reviewUnmatched);
+    connect(m_reviewCollisionButton, &QPushButton::clicked, this, [this] {
+        reviewCollisionSuggestions(nullptr, m_matchResult.mapSize);
+    });
     connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
     connect(m_autoDimensions, &QCheckBox::toggled, this, [this] {
         updateDimensionControls();
@@ -208,6 +224,13 @@ NewMapFromImageDialog::NewMapFromImageDialog(
     });
     connect(m_minFuzzyConfidence, qOverload<int>(&QSpinBox::valueChanged), this, [this] {
         resetAnalysis(QStringLiteral("Fuzzy thresholds changed. Run analysis again."));
+    });
+    connect(m_inferBlockedCollision, &QCheckBox::toggled, m_blockedCollision, &QWidget::setEnabled);
+    connect(m_inferBlockedCollision, &QCheckBox::toggled, this, [this] {
+        resetAnalysis(QStringLiteral("Collision suggestion settings changed. Run analysis again."));
+    });
+    connect(m_blockedCollision, qOverload<int>(&QSpinBox::valueChanged), this, [this] {
+        resetAnalysis(QStringLiteral("Collision suggestion settings changed. Run analysis again."));
     });
 #ifndef QT_NO_DEBUG
     connect(m_debugExportButton, &QPushButton::clicked, this, &NewMapFromImageDialog::exportDebugMetatiles);
@@ -330,6 +353,9 @@ void NewMapFromImageDialog::resetAnalysis(const QString &message)
     m_reviewUnmatchedButton->setEnabled(false);
     m_fuzzyMatchButton->setEnabled(false);
     updateCreateButton();
+    m_collisionResult = {};
+    m_collisionSuggestionsApplied = false;
+    m_reviewCollisionButton->setEnabled(false);
 #ifndef QT_NO_DEBUG
     m_debugExportButton->setEnabled(false);
 #endif
@@ -553,6 +579,12 @@ void NewMapFromImageDialog::updateMatchDisplay()
     updatePreview();
     m_reviewUnmatchedButton->setEnabled(m_matchResult.unmatchedCount > 0);
     m_fuzzyMatchButton->setEnabled(m_matchResult.unmatchedCount > 0);
+    m_collisionResult = m_collisionSuggester.suggest(
+        m_imageResult.sourceImage, m_matchResult.mapSize,
+        Block::getMaxCollision(), Block::getMaxElevation(),
+        projectConfig.defaultCollision, projectConfig.defaultElevation,
+        m_inferBlockedCollision->isChecked() ? m_blockedCollision->value() : -1);
+    m_reviewCollisionButton->setEnabled(m_collisionResult.valid);
     updateCreateButton();
 #ifndef QT_NO_DEBUG
     m_debugExportButton->setEnabled(!m_renderResult.metatiles.isEmpty());
@@ -675,6 +707,9 @@ void NewMapFromImageDialog::createMapFromMatch()
         resetAnalysis(QStringLiteral("Match results are no longer valid. Run analysis again."));
         return;
     }
+    if (!reviewCollisionSuggestions(&importedBlockdata, mapSize)) {
+        return;
+    }
     int approvedCorrectionCount = 0;
     for (const auto &cell : m_matchResult.cells) {
         if (!cell.matched) {
@@ -687,13 +722,16 @@ void NewMapFromImageDialog::createMapFromMatch()
         QStringLiteral("Create Map From Image"),
         QString(
             "Create map '%1' in group '%2' using %3 × %4 cells (%5 exact matches, %6 approved corrections)?\n\n"
-            "Collision and elevation will use their default values. No project files will be written until you save."
+             "%7 No project files will be written until you save."
         ).arg(mapName)
          .arg(mapGroup)
          .arg(mapSize.width())
          .arg(mapSize.height())
          .arg(m_matchResult.exactMatchCount)
-         .arg(approvedCorrectionCount),
+         .arg(approvedCorrectionCount)
+         .arg(m_collisionSuggestionsApplied
+              ? QStringLiteral("Reviewed collision/elevation suggestions are included in the undoable import.")
+              : QStringLiteral("Collision/elevation remain at their default values.")),
         QMessageBox::Yes | QMessageBox::Cancel,
         QMessageBox::Cancel
     );
@@ -725,6 +763,86 @@ void NewMapFromImageDialog::createMapFromMatch()
 
     m_project->newMapSettings = settings;
     QDialog::accept();
+}
+
+bool NewMapFromImageDialog::reviewCollisionSuggestions(Blockdata *blockdata, const QSize &mapSize)
+{
+    // Always regenerate immediately before display so the reviewed values and
+    // the values applied below share the exact current image, project defaults,
+    // field bounds, and user-selected blocked collision semantics.
+    m_collisionSuggestionsApplied = false;
+    m_collisionResult = m_collisionSuggester.suggest(
+        m_imageResult.sourceImage, mapSize, Block::getMaxCollision(), Block::getMaxElevation(),
+        projectConfig.defaultCollision, projectConfig.defaultElevation,
+        m_inferBlockedCollision->isChecked() ? m_blockedCollision->value() : -1);
+    if (!m_collisionResult.valid) {
+        QMessageBox::warning(this, QStringLiteral("Collision Suggestions Unavailable"),
+                             m_collisionResult.error);
+        return false;
+    }
+
+    QDialog review(this);
+    review.setWindowTitle(QStringLiteral("Review Collision and Elevation Suggestions"));
+    review.resize(900, 520);
+    auto *layout = new QVBoxLayout(&review);
+    layout->addWidget(new QLabel(QStringLiteral(
+        "These deterministic suggestions are based only on opacity and visible surface cues. "
+        "Review them before choosing whether to include them in the undoable map import.")));
+    auto *table = new QTableWidget(m_collisionResult.suggestions.size(), 6, &review);
+    table->setHorizontalHeaderLabels({QStringLiteral("X"), QStringLiteral("Y"),
+                                      QStringLiteral("Collision"), QStringLiteral("Elevation"),
+                                      QStringLiteral("Confidence"), QStringLiteral("Reason")});
+    table->horizontalHeader()->setStretchLastSection(true);
+    for (int i = 0; i < m_collisionResult.suggestions.size(); ++i) {
+        const auto &suggestion = m_collisionResult.suggestions.at(i);
+        table->setItem(i, 0, new QTableWidgetItem(QString::number(suggestion.x)));
+        table->setItem(i, 1, new QTableWidgetItem(QString::number(suggestion.y)));
+        table->setItem(i, 2, new QTableWidgetItem(QString::number(suggestion.collision)));
+        table->setItem(i, 3, new QTableWidgetItem(QString::number(suggestion.elevation)));
+        table->setItem(i, 4, new QTableWidgetItem(QStringLiteral("%1%").arg(suggestion.confidence)));
+        table->setItem(i, 5, new QTableWidgetItem(suggestion.rationale));
+    }
+    table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    layout->addWidget(table, 1);
+    auto *buttons = new QDialogButtonBox(QDialogButtonBox::Cancel);
+    auto *apply = buttons->addButton(QStringLiteral("Apply Suggestions"), QDialogButtonBox::AcceptRole);
+    auto *defaults = buttons->addButton(QStringLiteral("Keep Defaults"), QDialogButtonBox::DestructiveRole);
+    layout->addWidget(buttons);
+    int choice = 0;
+    connect(apply, &QPushButton::clicked, &review, [&review, &choice] {
+        choice = 1;
+        review.accept();
+    });
+    connect(defaults, &QPushButton::clicked, &review, [&review, &choice] {
+        choice = 2;
+        review.reject();
+    });
+    connect(buttons, &QDialogButtonBox::rejected, &review, [&review, &choice] {
+        choice = 0;
+        review.reject();
+    });
+    review.exec();
+    if (choice == 2) {
+        if (blockdata) {
+            for (Block &block : *blockdata) {
+                block.setCollision(projectConfig.defaultCollision);
+                block.setElevation(projectConfig.defaultElevation);
+            }
+        }
+        m_collisionSuggestionsApplied = false;
+        return true;
+    }
+    if (choice != 1) return false;
+    if (blockdata) {
+        for (const auto &suggestion : m_collisionResult.suggestions) {
+            const int index = suggestion.y * mapSize.width() + suggestion.x;
+            if (index < 0 || index >= blockdata->size()) return false;
+            (*blockdata)[index].setCollision(suggestion.collision);
+            (*blockdata)[index].setElevation(suggestion.elevation);
+        }
+    }
+    m_collisionSuggestionsApplied = blockdata != nullptr;
+    return true;
 }
 
 void NewMapFromImageDialog::reviewUnmatched()

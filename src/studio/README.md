@@ -18,6 +18,8 @@ Current and planned feature areas:
   layer splitting, tile/color budget checks, and Porytiles source generation.
 - `ArtworkSourceDialog` — primary/secondary source preview and handoff to the
   existing safe Porytiles compile flow.
+- `SmartCollisionSuggester` — pure, deterministic per-cell collision/elevation
+  proposals with confidence and explanations for imported terrain.
 - `build/` — project build/test process orchestration.
 
 Create these subdirectories only when their first real implementation is added.

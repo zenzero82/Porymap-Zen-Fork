@@ -99,9 +99,15 @@ compatible with future upstream merges.
 
 ## Milestone 9 — Smart collision assistance
 
-- Suggest collision/elevation values from imported terrain.
-- Require preview and confirmation.
-- Commit through normal undoable layout edits.
+**Status: complete.**
+
+- Suggest collision/elevation values conservatively from imported terrain
+  opacity and visible surface cues.
+- Show every cell's values, confidence, and rationale in a review table.
+- Let users apply the reviewed suggestions, keep defaults, or cancel map
+  creation.
+- Commit accepted values through the existing undoable `ImportMetatiles`
+  layout edit without writing project files before save.
 
 ## Milestone 10 — Terrain and autotile brushes
 
