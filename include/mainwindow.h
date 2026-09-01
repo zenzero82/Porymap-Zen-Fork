@@ -34,6 +34,8 @@
 #include "newlayoutdialog.h"
 #include "message.h"
 #include "resizelayoutpopup.h"
+#include "studio/rombuilddialog.h"
+#include "studio/aiassistantdialog.h"
 #include "unlockableicon.h"
 
 #if __has_include(<QJSValue>)
@@ -218,6 +220,8 @@ private slots:
 
     void on_actionNew_Tileset_triggered();
     void openNewMapFromImageDialog();
+    void openRomBuildDialog();
+    void openAiAssistantDialog();
     void on_action_Save_triggered();
     void on_action_Exit_triggered();
     void onLayoutSelectorEditingFinished();

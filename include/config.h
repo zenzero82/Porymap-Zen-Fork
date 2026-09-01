@@ -131,6 +131,9 @@ public:
     QString porytilesExecutable;
     QString porytilesExpectedVersion;
     int porytilesTimeoutSeconds;
+    QString aiEndpoint;
+    QString aiTokenEnvironmentVariable;
+    int aiTimeoutSeconds;
     int paletteEditorBitDepth;
     int projectSettingsTab;
     ScriptAutocompleteMode scriptAutocompleteMode;
@@ -337,6 +340,13 @@ public:
         this->maxEventsPerGroup = 255;
         this->forcedMajorVersion = 0;
         this->metatileSelectorWidth = 8;
+        this->romBuildExecutable.clear();
+        this->romBuildArguments.clear();
+        this->romBuildWorkingDirectory.clear();
+        this->romTestExecutable.clear();
+        this->romTestArguments.clear();
+        this->romTestWorkingDirectory.clear();
+        this->romBuildTimeoutMs = 600000;
         this->globalConstantsFilepaths.clear();
         this->globalConstants.clear();
         this->identifiers.clear();
@@ -417,6 +427,13 @@ public:
     int maxEventsPerGroup;
     int forcedMajorVersion;
     int metatileSelectorWidth;
+    QString romBuildExecutable;
+    QStringList romBuildArguments;
+    QString romBuildWorkingDirectory;
+    QString romTestExecutable;
+    QStringList romTestArguments;
+    QString romTestWorkingDirectory;
+    int romBuildTimeoutMs;
     QStringList globalConstantsFilepaths;
     QMap<QString,QString> globalConstants;
 

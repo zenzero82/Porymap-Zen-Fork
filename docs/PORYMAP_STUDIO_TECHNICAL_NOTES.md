@@ -303,6 +303,46 @@ map through the canvas item's active-rule seam. Pencil and flood-fill paths
 share the same injected mapping and current manual 3×3 variant selection, then
 commit through the existing paint undo commands.
 
+### ROM build and test integration
+
+The File menu's **Build / Test ROM…** dialog stores separate project build and
+test configurations in `porymap.project.cfg`. Each configuration contains an
+executable, a JSON array of arguments, and an arbitrary working directory; the
+timeout is shared. The values are reversibly encoded in the line-based project
+configuration so whitespace, `#`, Unicode, separators, and empty arguments
+survive reload. Studio passes the executable and `QStringList` arguments
+directly to `QProcess`, never through a shell command string.
+
+Standard output and standard error stream into the dialog while the process is
+running. Users may cancel, and timeout, startup, crash, and nonzero-exit states
+produce explicit errors. Studio does not inspect, rewrite, or assume the
+location of ROM outputs.
+
+### Optional AI assistant
+
+**Tools → Optional AI Assistant…** is a provider-neutral, text-only boundary.
+It never reads the active project, map, tileset, image, or filesystem. Users
+enter the request and optional context themselves, review the exact redacted
+JSON body, and check consent before sending. Editing the endpoint, token
+variable, timeout, prompt, or context clears that consent.
+
+The endpoint must accept a JSON object with `tool`, `prompt`, and optional
+`context` strings. Responses may be plain text or JSON containing `response`,
+`text`, `output`, or an OpenAI-style first `choices` item. Results are shown as
+advice only and never modify project state.
+
+Remote endpoints require HTTPS; unencrypted HTTP is accepted only for loopback
+adapters. Redirects are disabled so reviewed data and bearer credentials cannot
+move to an unreviewed origin. Optional bearer credentials are loaded at request
+time from a configured environment-variable name—the value is never displayed,
+saved, logged, or included in the payload. Requests are bounded to 12,000 prompt
+characters plus 4,000 context characters, responses to 32 KiB, and timeouts to
+five minutes. Cancellation, timeout, network, HTTP, and oversized-response
+failures are explicit.
+
+Deterministic Studio services remain preferred for image matching, collision
+suggestions, terrain rules, Porytiles generation, and project edits.
+
 ### Implemented integration
 
 The Studio integration uses a subprocess adapter rather than linking or copying

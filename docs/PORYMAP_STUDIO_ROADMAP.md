@@ -123,15 +123,27 @@ compatible with future upstream merges.
 
 ## Milestone 11 — Build and test ROM integration
 
-- Add configurable project build/test commands.
-- Stream output, support cancellation, and report actionable errors.
-- Do not assume one decompilation-project layout.
+**Status: complete.**
+
+- Configure separate per-project ROM build and test executables, structured
+  argument lists, working directories, and timeouts.
+- Stream stdout/stderr into a native Studio dialog, support cancellation and
+  timeout, and report start, crash, and nonzero-exit errors.
+- Invoke commands directly through `QProcess` without shell command strings or
+  assumptions about a decompilation project's directory layout.
 
 ## Milestone 12 — Optional AI-assisted tools
 
-- Keep AI features optional and isolated.
-- Never send project assets without explicit user action.
-- Prefer deterministic editor tools whenever they solve the same problem.
+**Status: complete.**
+
+- Provide an isolated, optional text-only AI assistant under the Tools menu.
+- Preview the exact redacted JSON payload and require consent for that exact
+  payload; any request edit revokes consent.
+- Never collect or attach project files, images, paths, maps, or tilesets.
+- Keep responses advisory and non-mutating so deterministic editor tools remain
+  the source of truth.
+- Bound requests and responses, support cancellation/timeouts, disable
+  redirects, and allow bearer tokens only through an environment-variable name.
 
 ## Ongoing compatibility requirements
 

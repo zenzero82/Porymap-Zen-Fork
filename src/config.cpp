@@ -1,4 +1,5 @@
 #include "config.h"
+#include "studio/rombuildprocess.h"
 #include "log.h"
 #include "shortcut.h"
 #include "map.h"
@@ -362,6 +363,9 @@ void PorymapConfig::reset() {
     this->porytilesExecutable = "";
     this->porytilesExpectedVersion = "";
     this->porytilesTimeoutSeconds = 120;
+    this->aiEndpoint = "";
+    this->aiTokenEnvironmentVariable = "";
+    this->aiTimeoutSeconds = 30;
     this->paletteEditorBitDepth = 24;
     this->projectSettingsTab = 0;
     this->scriptAutocompleteMode = ScriptAutocompleteMode::MapOnly;
@@ -518,6 +522,12 @@ void PorymapConfig::parseConfigKeyValue(QString key, QString value) {
         this->porytilesExpectedVersion = value;
     } else if (key == "porytiles_timeout_seconds") {
         this->porytilesTimeoutSeconds = getConfigInteger(key, value, 1, 3600, 120);
+    } else if (key == "ai_endpoint") {
+        this->aiEndpoint = value;
+    } else if (key == "ai_token_environment_variable") {
+        this->aiTokenEnvironmentVariable = value;
+    } else if (key == "ai_timeout_seconds") {
+        this->aiTimeoutSeconds = getConfigInteger(key, value, 1, 300, 30);
     } else if (key == "palette_editor_bit_depth") {
         this->paletteEditorBitDepth = getConfigInteger(key, value, 15, 24, 24);
         if (this->paletteEditorBitDepth != 15 && this->paletteEditorBitDepth != 24){
@@ -662,6 +672,9 @@ QMap<QString, QString> PorymapConfig::getKeyValueMap() {
     map.insert("porytiles_executable", this->porytilesExecutable);
     map.insert("porytiles_expected_version", this->porytilesExpectedVersion);
     map.insert("porytiles_timeout_seconds", QString::number(this->porytilesTimeoutSeconds));
+    map.insert("ai_endpoint", this->aiEndpoint);
+    map.insert("ai_token_environment_variable", this->aiTokenEnvironmentVariable);
+    map.insert("ai_timeout_seconds", QString::number(this->aiTimeoutSeconds));
     map.insert("palette_editor_bit_depth", QString::number(this->paletteEditorBitDepth));
     map.insert("project_settings_tab", QString::number(this->projectSettingsTab));
     map.insert("script_autocomplete_mode", QString::number(this->scriptAutocompleteMode));
@@ -935,6 +948,20 @@ void ProjectConfig::parseConfigKeyValue(QString key, QString value) {
         this->defaultElevation = getConfigUint32(key, value, 0, Block::maxValue);
     } else if (key == "default_collision") {
         this->defaultCollision = getConfigUint32(key, value, 0, Block::maxValue);
+    } else if (key == "rom_build_executable_encoded") {
+        this->romBuildExecutable = Studio::RomBuildProcess::decodeText(value);
+    } else if (key == "rom_build_arguments_encoded") {
+        this->romBuildArguments = Studio::RomBuildProcess::decodeArguments(value);
+    } else if (key == "rom_build_working_directory_encoded") {
+        this->romBuildWorkingDirectory = Studio::RomBuildProcess::decodeText(value);
+    } else if (key == "rom_test_executable_encoded") {
+        this->romTestExecutable = Studio::RomBuildProcess::decodeText(value);
+    } else if (key == "rom_test_arguments_encoded") {
+        this->romTestArguments = Studio::RomBuildProcess::decodeArguments(value);
+    } else if (key == "rom_test_working_directory_encoded") {
+        this->romTestWorkingDirectory = Studio::RomBuildProcess::decodeText(value);
+    } else if (key == "rom_build_timeout_ms") {
+        this->romBuildTimeoutMs = getConfigInteger(key, value, 1000, 86400000, 600000);
     } else if (key == "default_map_width") {
         this->defaultMapSize.setWidth(getConfigInteger(key, value, 1));
     } else if (key == "default_map_height") {
@@ -1115,6 +1142,13 @@ QMap<QString, QString> ProjectConfig::getKeyValueMap() {
     map.insert("default_metatile", Metatile::getMetatileIdString(this->defaultMetatileId));
     map.insert("default_elevation", QString::number(this->defaultElevation));
     map.insert("default_collision", QString::number(this->defaultCollision));
+    map.insert("rom_build_executable_encoded", Studio::RomBuildProcess::encodeText(this->romBuildExecutable));
+    map.insert("rom_build_arguments_encoded", Studio::RomBuildProcess::encodeArguments(this->romBuildArguments));
+    map.insert("rom_build_working_directory_encoded", Studio::RomBuildProcess::encodeText(this->romBuildWorkingDirectory));
+    map.insert("rom_test_executable_encoded", Studio::RomBuildProcess::encodeText(this->romTestExecutable));
+    map.insert("rom_test_arguments_encoded", Studio::RomBuildProcess::encodeArguments(this->romTestArguments));
+    map.insert("rom_test_working_directory_encoded", Studio::RomBuildProcess::encodeText(this->romTestWorkingDirectory));
+    map.insert("rom_build_timeout_ms", QString::number(this->romBuildTimeoutMs));
     map.insert("default_map_width", QString::number(this->defaultMapSize.width()));
     map.insert("default_map_height", QString::number(this->defaultMapSize.height()));
     map.insert("new_map_border_metatiles", Metatile::getMetatileIdStrings(this->newMapBorderMetatileIds));

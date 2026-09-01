@@ -22,6 +22,11 @@ Current and planned feature areas:
   proposals with confidence and explanations for imported terrain.
 - `TerrainRuleService` — validated, data-driven marching-squares resolution
   for connected terrain and autotile brushes.
+- `RomBuildProcess` / `RomBuildDialog` — configurable direct-process ROM build
+  and test execution with streamed diagnostics, timeout, and cancellation.
+- `AiAssistantService` / `AiAssistantDialog` — optional text-only external AI
+  requests with exact payload preview, per-request consent, strict bounds,
+  redaction, cancellation, and non-mutating results.
 - `build/` — project build/test process orchestration.
 
 Create these subdirectories only when their first real implementation is added.

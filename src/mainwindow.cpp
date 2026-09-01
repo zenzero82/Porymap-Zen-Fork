@@ -32,6 +32,7 @@
 #include "maplayout.h"
 #include "studio/newmapfromimagedialog.h"
 #include "studio/productinfo.h"
+#include "studio/aiassistantdialog.h"
 
 #include <QClipboard>
 #include <QDirIterator>
@@ -391,6 +392,8 @@ void MainWindow::initExtraSignals() {
 
     connect(ui->action_NewMap, &QAction::triggered, this, &MainWindow::openNewMapDialog);
     connect(ui->action_NewMapFromImage, &QAction::triggered, this, &MainWindow::openNewMapFromImageDialog);
+    connect(ui->action_Build_ROM, &QAction::triggered, this, &MainWindow::openRomBuildDialog);
+    connect(ui->action_AI_Assistant, &QAction::triggered, this, &MainWindow::openAiAssistantDialog);
     connect(ui->action_NewLayout, &QAction::triggered, this, &MainWindow::openNewLayoutDialog);
     connect(ui->comboBox_LayoutSelector, &NoScrollComboBox::editingFinished, this, &MainWindow::onLayoutSelectorEditingFinished);
     connect(ui->checkBox_smartPaths, &QCheckBox::toggled, this, &MainWindow::setSmartPathsEnabled);
@@ -1822,6 +1825,18 @@ void MainWindow::openNewMapFromImageDialog() {
     }
 
     auto dialog = new Studio::NewMapFromImageDialog(this->editor->project, renderContext, this);
+    dialog->open();
+}
+
+void MainWindow::openRomBuildDialog() {
+    if (!this->editor->project)
+        return;
+    auto dialog = new Studio::RomBuildDialog(this->editor->project, this);
+    dialog->open();
+}
+
+void MainWindow::openAiAssistantDialog() {
+    auto dialog = new Studio::AiAssistantDialog(this);
     dialog->open();
 }
 

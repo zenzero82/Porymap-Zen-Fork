@@ -162,6 +162,10 @@ SOURCES += src/core/advancemapparser.cpp \
     src/studio/imagemetatileapproval.cpp \
     src/studio/porytilesdialog.cpp \
     src/studio/porytilesprocess.cpp \
+    src/studio/rombuildprocess.cpp \
+    src/studio/rombuilddialog.cpp \
+    src/studio/aiassistantservice.cpp \
+    src/studio/aiassistantdialog.cpp \
     src/studio/artworksourcedialog.cpp \
     src/studio/artworksourcegenerator.cpp \
     src/studio/smartcollisionsuggester.cpp \
@@ -297,6 +301,10 @@ HEADERS  += include/core/advancemapparser.h \
     include/studio/imagemetatileapproval.h \
     include/studio/porytilesdialog.h \
     include/studio/porytilesprocess.h \
+    include/studio/rombuildprocess.h \
+    include/studio/rombuilddialog.h \
+    include/studio/aiassistantservice.h \
+    include/studio/aiassistantdialog.h \
     include/studio/artworksourcedialog.h \
     include/studio/artworksourcegenerator.h \
     include/studio/smartcollisionsuggester.h \
