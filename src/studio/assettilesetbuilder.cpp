@@ -26,6 +26,7 @@ AssetTilesetBuilder::Result AssetTilesetBuilder::build(
     };
     QVector<LoadedAsset> assets;
     int totalTiles = 0;
+    int totalMetatiles = 0;
     for (const QString &path : assetPaths) {
         QImage image(path);
         if (image.isNull()) {
@@ -40,43 +41,44 @@ AssetTilesetBuilder::Result AssetTilesetBuilder::build(
             return result;
         }
         totalTiles += tilesWide * tilesHigh;
+        totalMetatiles +=
+            ((image.width() + Metatile::pixelWidth() - 1) / Metatile::pixelWidth())
+            * ((image.height() + Metatile::pixelHeight() - 1) / Metatile::pixelHeight());
         assets.append({image, path});
     }
 
-    const int atlasTilesWide = 16;
-    const int atlasTileRows = qMax(
-        2,
-        ((totalTiles + atlasTilesWide - 1) / atlasTilesWide + 1) / 2 * 2
-    );
+    const int atlasMetatilesWide = 8;
+    const int atlasMetatileRows =
+        qMax(1, (totalMetatiles + atlasMetatilesWide - 1) / atlasMetatilesWide);
     QImage atlas(
-        atlasTilesWide * Tile::pixelWidth(),
-        atlasTileRows * Tile::pixelHeight(),
+        atlasMetatilesWide * Metatile::pixelWidth(),
+        atlasMetatileRows * Metatile::pixelHeight(),
         QImage::Format_ARGB32
     );
     atlas.fill(Qt::transparent);
     QPainter painter(&atlas);
-    int tileIndex = 0;
+    int metatileIndex = 0;
     for (const LoadedAsset &asset : assets) {
-        const int tilesWide =
-            (asset.image.width() + Tile::pixelWidth() - 1) / Tile::pixelWidth();
-        const int tilesHigh =
-            (asset.image.height() + Tile::pixelHeight() - 1) / Tile::pixelHeight();
-        for (int tileY = 0; tileY < tilesHigh; tileY++) {
-            for (int tileX = 0; tileX < tilesWide; tileX++) {
+        const int metatilesWide =
+            (asset.image.width() + Metatile::pixelWidth() - 1) / Metatile::pixelWidth();
+        const int metatilesHigh =
+            (asset.image.height() + Metatile::pixelHeight() - 1) / Metatile::pixelHeight();
+        for (int metatileY = 0; metatileY < metatilesHigh; metatileY++) {
+            for (int metatileX = 0; metatileX < metatilesWide; metatileX++) {
                 const QRect sourceRect(
-                    tileX * Tile::pixelWidth(),
-                    tileY * Tile::pixelHeight(),
-                    Tile::pixelWidth(),
-                    Tile::pixelHeight()
+                    metatileX * Metatile::pixelWidth(),
+                    metatileY * Metatile::pixelHeight(),
+                    Metatile::pixelWidth(),
+                    Metatile::pixelHeight()
                 );
                 const QRect targetRect(
-                    (tileIndex % atlasTilesWide) * Tile::pixelWidth(),
-                    (tileIndex / atlasTilesWide) * Tile::pixelHeight(),
-                    Tile::pixelWidth(),
-                    Tile::pixelHeight()
+                    (metatileIndex % atlasMetatilesWide) * Metatile::pixelWidth(),
+                    (metatileIndex / atlasMetatilesWide) * Metatile::pixelHeight(),
+                    Metatile::pixelWidth(),
+                    Metatile::pixelHeight()
                 );
                 painter.drawImage(targetRect, asset.image, sourceRect);
-                tileIndex++;
+                metatileIndex++;
             }
         }
     }
