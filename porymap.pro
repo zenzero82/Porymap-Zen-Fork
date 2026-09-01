@@ -162,6 +162,8 @@ SOURCES += src/core/advancemapparser.cpp \
     src/studio/imagemetatileapproval.cpp \
     src/studio/porytilesdialog.cpp \
     src/studio/porytilesprocess.cpp \
+    src/studio/artworksourcedialog.cpp \
+    src/studio/artworksourcegenerator.cpp \
     src/studio/mapimageanalyzer.cpp \
     src/studio/metatilerenderservice.cpp \
     src/studio/newmapfromimagedialog.cpp \
@@ -293,6 +295,8 @@ HEADERS  += include/core/advancemapparser.h \
     include/studio/imagemetatileapproval.h \
     include/studio/porytilesdialog.h \
     include/studio/porytilesprocess.h \
+    include/studio/artworksourcedialog.h \
+    include/studio/artworksourcegenerator.h \
     include/studio/mapimageanalyzer.h \
     include/studio/metatilerenderservice.h \
     include/studio/newmapfromimagedialog.h \

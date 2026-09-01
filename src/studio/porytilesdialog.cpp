@@ -136,6 +136,16 @@ PorytilesDialog::PorytilesDialog(Project *project,
     updateOperationUi();
 }
 
+void PorytilesDialog::setSourceDirectory(const QString &directory)
+{
+    sourceEdit->setText(directory);
+}
+
+void PorytilesDialog::setPrimaryContextDirectory(const QString &directory)
+{
+    primaryContextEdit->setText(directory);
+}
+
 Tileset *PorytilesDialog::selectedTileset() const
 {
     return tilesetCombo->currentData().toBool() ? secondaryTileset : primaryTileset;

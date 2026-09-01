@@ -85,9 +85,17 @@ compatible with future upstream merges.
 
 ## Milestone 8 — Generate tilesets from complete artwork
 
-- Convert source artwork into decompiled Porytiles-format assets.
-- Compile and validate generated Porymap-format tileset output.
-- Surface palette and tile-allocation failures clearly.
+**Status: complete.**
+
+- Accept a vertically stacked bottom/middle/top PNG aligned to the 16×16
+  metatile grid.
+- Deterministically generate Porytiles layer images and legacy
+  `attributes.csv` metadata.
+- Validate selected-tileset color and unique 8×8 tile budgets before writing a
+  source package.
+- Preview generated files and hand confirmed source to the Phase 7
+  version-pinned compile, validation, and safe-application flow.
+- Require the paired primary Porytiles source context for secondary generation.
 
 ## Milestone 9 — Smart collision assistance
 

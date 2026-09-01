@@ -2,6 +2,12 @@
 
 set -euo pipefail
 
+# Validation, manual builds, and the desktop workflow may be requested at the
+# same time. qmake rewrites Makefiles in place, so serialize this build script
+# to prevent concurrent writers from corrupting generated build files.
+exec 9>/tmp/porymap-native-build.lock
+flock 9
+
 qt_version="$(qmake -query QT_VERSION)"
 
 qt_module_root() {
@@ -73,3 +79,9 @@ mkdir -p "$porytiles_test_build_dir"
 qmake tests/studio/porytilesprocess_test.pro -o "$porytiles_test_build_dir/Makefile"
 make -C "$porytiles_test_build_dir" -j"${JOBS:-$(nproc)}"
 "$porytiles_test_build_dir/porytilesprocess_test"
+
+artwork_test_build_dir="build/tests/artwork"
+mkdir -p "$artwork_test_build_dir"
+qmake tests/studio/artworksourcegenerator_test.pro -o "$artwork_test_build_dir/Makefile"
+make -C "$artwork_test_build_dir" -j"${JOBS:-$(nproc)}"
+"$artwork_test_build_dir/artworksourcegenerator_test"

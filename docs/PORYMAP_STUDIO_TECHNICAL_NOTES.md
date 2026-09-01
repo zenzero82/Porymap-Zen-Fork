@@ -260,6 +260,23 @@ Compilation produces the assets Porymap already consumes, including:
 The behavior constants header is required to map named behaviors to the numeric
 attributes stored by the target decompilation project.
 
+### Complete artwork generation
+
+Phase 8 accepts one PNG containing equal-height bottom, middle, and top layers
+stacked vertically. Each layer must be aligned to the native 16×16 metatile
+grid. Studio splits the sheet without resampling, counts unique 8×8 pixel tiles
+in deterministic row-major order, and rejects artwork that exceeds the selected
+primary or secondary tileset's tile and color budgets.
+
+The generated source package contains `bottom.png`, `middle.png`, `top.png`,
+and a legacy Porytiles `attributes.csv` using `id,behavior` rows initialized to
+`MB_NORMAL`. Collision/elevation inference is intentionally deferred to Phase
+9. The package is written only to a new user-selected directory outside the
+active project. The dialog displays every generated layer and the complete CSV
+for review, then requires explicit confirmation before passing the immutable
+package path to the existing staged Porytiles compile dialog. Secondary
+generation validates a complete paired primary source before creating output.
+
 ### Implemented integration
 
 The Studio integration uses a subprocess adapter rather than linking or copying

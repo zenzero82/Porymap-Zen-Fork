@@ -126,6 +126,7 @@ private:
     void exportTilesImage(Tileset*);
     void exportPorytilesLayerImages(Tileset*);
     void openPorytilesIntegration();
+    void openArtworkGeneration(bool secondary);
     void exportMetatilesImage();
     void refresh();
     void commitMetatileLabel();

@@ -1,5 +1,6 @@
 #include "tileseteditor.h"
 #include "studio/porytilesdialog.h"
+#include "studio/artworksourcedialog.h"
 #include "ui_tileseteditor.h"
 #include "log.h"
 #include "imageproviders.h"
@@ -59,6 +60,8 @@ TilesetEditor::TilesetEditor(Project *project, Layout *layout, QWidget *parent) 
     connect(ui->actionExport_Primary_Porytiles_Layer_Images,   &QAction::triggered, [this] { exportPorytilesLayerImages(this->primaryTileset); });
     connect(ui->actionExport_Secondary_Porytiles_Layer_Images, &QAction::triggered, [this] { exportPorytilesLayerImages(this->secondaryTileset); });
     connect(ui->actionPorytiles_Integration, &QAction::triggered, this, &TilesetEditor::openPorytilesIntegration);
+    connect(ui->actionGenerate_Primary_Porytiles_Source, &QAction::triggered, this, [this] { openArtworkGeneration(false); });
+    connect(ui->actionGenerate_Secondary_Porytiles_Source, &QAction::triggered, this, [this] { openArtworkGeneration(true); });
 
     connect(ui->actionExport_Metatiles_Image, &QAction::triggered, [this] { exportMetatilesImage(); });
 
@@ -91,6 +94,24 @@ void TilesetEditor::openPorytilesIntegration()
 
     Studio::PorytilesDialog dialog(this->project, this->primaryTileset, this->secondaryTileset, this);
     connect(&dialog, &Studio::PorytilesDialog::compiledOutputApplied, this, [this] {
+        emit this->tilesetsSaved(this->primaryTileset->name, this->secondaryTileset->name);
+        this->setTilesets(this->primaryTileset->name, this->secondaryTileset->name);
+        this->refresh();
+    });
+    dialog.exec();
+}
+
+void TilesetEditor::openArtworkGeneration(bool secondary)
+{
+    Tileset *tileset = secondary ? this->secondaryTileset : this->primaryTileset;
+    if (!tileset) return;
+    if (this->hasUnsavedChanges) {
+        QMessageBox::warning(this, QStringLiteral("Unsaved Tileset Changes"),
+                             QStringLiteral("Save or discard the current Tileset Editor changes before generating artwork source."));
+        return;
+    }
+    Studio::ArtworkSourceDialog dialog(this->project, tileset, this);
+    connect(&dialog, &Studio::ArtworkSourceDialog::compiledOutputApplied, this, [this] {
         emit this->tilesetsSaved(this->primaryTileset->name, this->secondaryTileset->name);
         this->setTilesets(this->primaryTileset->name, this->secondaryTileset->name);
         this->refresh();

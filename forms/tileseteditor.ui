@@ -894,6 +894,9 @@
     <addaction name="menuExport_porytiles_Layer_Images"/>
      <addaction name="separator"/>
      <addaction name="actionPorytiles_Integration"/>
+     <addaction name="separator"/>
+     <addaction name="actionGenerate_Primary_Porytiles_Source"/>
+     <addaction name="actionGenerate_Secondary_Porytiles_Source"/>
    </widget>
    <widget class="QMenu" name="menuTools">
     <property name="title">
@@ -957,6 +960,16 @@
     </property>
     <property name="toolTip">
      <string>Compile or decompile a tileset with a validated Porytiles executable</string>
+    </property>
+   </action>
+   <action name="actionGenerate_Primary_Porytiles_Source">
+    <property name="text">
+     <string>Generate Primary Porytiles Source from Artwork...</string>
+    </property>
+   </action>
+   <action name="actionGenerate_Secondary_Porytiles_Source">
+    <property name="text">
+     <string>Generate Secondary Porytiles Source from Artwork...</string>
     </property>
    </action>
   <action name="actionChange_Metatiles_Count">

@@ -24,6 +24,8 @@ public:
                             Tileset *primaryTileset,
                             Tileset *secondaryTileset,
                             QWidget *parent = nullptr);
+    void setSourceDirectory(const QString &directory);
+    void setPrimaryContextDirectory(const QString &directory);
 
 signals:
     void compiledOutputApplied();

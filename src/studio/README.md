@@ -14,6 +14,10 @@ Current and planned feature areas:
   confirmed application.
 - `PorytilesDialog` — Tileset Editor configuration, diagnostics, preview, and
   explicit confirmation UI.
+- `ArtworkSourceGenerator` — deterministic stacked-artwork validation,
+  layer splitting, tile/color budget checks, and Porytiles source generation.
+- `ArtworkSourceDialog` — primary/secondary source preview and handoff to the
+  existing safe Porytiles compile flow.
 - `build/` — project build/test process orchestration.
 
 Create these subdirectories only when their first real implementation is added.
