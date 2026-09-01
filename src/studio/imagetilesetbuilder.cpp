@@ -506,13 +506,6 @@ ImageTilesetBuilder::PairResult ImageTilesetBuilder::buildPair(
         state->metatileIndices.insert(projection.metatileKey, localMetatileIndex);
         return state->options.metatileIdBase + localMetatileIndex;
     };
-    const auto projectionScore = [](const RoleState &state, const Projection &projection) {
-        const double tileRatio = static_cast<double>(projection.tileCount) / state.options.maxTiles;
-        const double metatileRatio =
-            static_cast<double>(projection.metatileCount) / state.options.maxMetatiles;
-        return qMax(tileRatio, metatileRatio);
-    };
-
     QImage primarySource(sourceImage.size(), QImage::Format_ARGB32);
     QImage secondarySource(sourceImage.size(), QImage::Format_ARGB32);
     primarySource.fill(Qt::transparent);
@@ -566,11 +559,10 @@ ImageTilesetBuilder::PairResult ImageTilesetBuilder::buildPair(
             return pair;
         }
 
-        const bool useSecondary =
-            !primaryProjection.fits
-            || (secondaryProjection.fits
-                && projectionScore(secondaryState, secondaryProjection)
-                    < projectionScore(primaryState, primaryProjection));
+        // Keep one role packed before spilling to the other. Balancing the
+        // ratios can leave one unused slot in both roles even though the next
+        // metatile needs two or more new tiles and would fit after packing.
+        const bool useSecondary = !primaryProjection.fits;
         RoleState *state = useSecondary ? &secondaryState : &primaryState;
         const Projection &projection =
             useSecondary ? secondaryProjection : primaryProjection;
