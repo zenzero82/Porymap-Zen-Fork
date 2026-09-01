@@ -20,6 +20,7 @@ public:
         int metatileIdBase = 0;
         int paletteId = 0;
         int tilesPerMetatile = Metatile::tilesPerLayer();
+        QList<QRgb> paletteOverride;
     };
 
     struct Result {
@@ -33,6 +34,7 @@ public:
         int uniqueTileCount = 0;
         int uniqueMetatileCount = 0;
         bool quantized = false;
+        bool partialMap = false;
         QString errorMessage;
 
         bool isValid() const
@@ -41,11 +43,34 @@ public:
                 && !indexedSource.isNull()
                 && !tilesImage.isNull()
                 && !metatiles.isEmpty()
+                && (partialMap || mapMetatileIds.size() == mapSize.width() * mapSize.height());
+        }
+    };
+
+    struct PairResult {
+        Result primary;
+        Result secondary;
+        QSize mapSize;
+        QVector<uint16_t> mapMetatileIds;
+        int sourceColorCount = 0;
+        bool quantized = false;
+        QString errorMessage;
+
+        bool isValid() const
+        {
+            return errorMessage.isEmpty()
+                && primary.isValid()
+                && secondary.isValid()
                 && mapMetatileIds.size() == mapSize.width() * mapSize.height();
         }
     };
 
     Result build(const QImage &sourceImage, const Options &options) const;
+    PairResult buildPair(
+        const QImage &sourceImage,
+        const Options &primaryOptions,
+        const Options &secondaryOptions
+    ) const;
 };
 
 } // namespace Studio

@@ -80,6 +80,10 @@ NewMapFromImageDialog::NewMapFromImageDialog(
         QStringLiteral("Build a new tileset from this image"),
         tilesetSourceGroup
     );
+    m_splitTilesetsIfNeeded = new QCheckBox(
+        QStringLiteral("Automatically split across new primary and secondary tilesets if one role is full"),
+        tilesetSourceGroup
+    );
     m_newTilesetName = new QLineEdit(tilesetSourceGroup);
     m_newTilesetType = new QComboBox(tilesetSourceGroup);
     m_newTilesetType->addItems({QStringLiteral("Primary"), QStringLiteral("Secondary")});
@@ -98,6 +102,7 @@ NewMapFromImageDialog::NewMapFromImageDialog(
             : tilesetPrefix + QStringLiteral("ImageImport")
     );
     tilesetSourceLayout->addRow(QString(), m_createTilesetFromImage);
+    tilesetSourceLayout->addRow(QString(), m_splitTilesetsIfNeeded);
     tilesetSourceLayout->addRow(QStringLiteral("New Tileset Name:"), m_newTilesetName);
     tilesetSourceLayout->addRow(QStringLiteral("New Tileset Role:"), m_newTilesetType);
     tilesetSourceLayout->addRow(QString(), m_newTilesetHelp);
@@ -278,6 +283,10 @@ NewMapFromImageDialog::NewMapFromImageDialog(
         updateTilesetSourceControls();
         resetAnalysis(QStringLiteral("Tileset source changed. Run analysis again."));
     });
+    connect(m_splitTilesetsIfNeeded, &QCheckBox::toggled, this, [this] {
+        updateTilesetSourceControls();
+        resetAnalysis(QStringLiteral("Tileset capacity strategy changed. Run analysis again."));
+    });
     connect(m_newTilesetType, qOverload<int>(&QComboBox::currentIndexChanged), this, [this] {
         updateTilesetSourceControls();
         resetAnalysis(QStringLiteral("New tileset role changed. Run analysis again."));
@@ -411,6 +420,8 @@ void NewMapFromImageDialog::resetAnalysis(const QString &message)
     m_renderResult = {};
     m_matchResult = {};
     m_tilesetBuildResult = {};
+    m_tilesetPairBuildResult = {};
+    m_usingGeneratedTilesetPair = false;
     m_analysisReconstructedImage = {};
     m_analysisDifferenceImage = {};
     m_corrections.clear();
@@ -452,10 +463,13 @@ void NewMapFromImageDialog::runAnalysis()
     }
     if (m_createTilesetFromImage->isChecked()) {
         const bool secondary = m_newTilesetType->currentIndex() == 1;
+        const bool allowSplit = m_splitTilesetsIfNeeded->isChecked();
         const QString pairedTilesetLabel = secondary
             ? m_primaryTileset->currentText()
             : m_secondaryTileset->currentText();
-        if (pairedTilesetLabel.isEmpty() || !m_project->getTileset(pairedTilesetLabel)) {
+        const bool pairedTilesetValid =
+            !pairedTilesetLabel.isEmpty() && m_project->getTileset(pairedTilesetLabel);
+        if (!pairedTilesetValid && !allowSplit) {
             resetAnalysis(QString(
                 "Select an existing %1 tileset to pair with the generated %2 tileset."
             ).arg(secondary ? QStringLiteral("primary") : QStringLiteral("secondary"),
@@ -476,24 +490,59 @@ void NewMapFromImageDialog::runAnalysis()
             m_imageResult.sourceImage,
             tilesetBuildOptions(secondary)
         );
-        if (!m_tilesetBuildResult.isValid()) {
-            const QString error = m_tilesetBuildResult.errorMessage;
-            resetAnalysis(error);
+        if ((!m_tilesetBuildResult.isValid() || !pairedTilesetValid) && allowSplit) {
+            m_tilesetPairBuildResult = m_tilesetBuilder.buildPair(
+                m_imageResult.sourceImage,
+                tilesetBuildOptions(false),
+                tilesetBuildOptions(true)
+            );
+            m_usingGeneratedTilesetPair = m_tilesetPairBuildResult.isValid();
+        }
+        if (!m_tilesetBuildResult.isValid() && !m_usingGeneratedTilesetPair) {
+            resetAnalysis(
+                allowSplit && !m_tilesetPairBuildResult.errorMessage.isEmpty()
+                    ? m_tilesetPairBuildResult.errorMessage
+                    : m_tilesetBuildResult.errorMessage
+            );
             return;
         }
 
         m_matchResult = {};
-        m_matchResult.reconstructedImage = m_tilesetBuildResult.indexedSource;
+        m_matchResult.reconstructedImage = m_usingGeneratedTilesetPair
+            ? m_imageResult.sourceImage
+            : m_tilesetBuildResult.indexedSource;
         m_reconstructedPreviewLabel->clear();
         m_differencePreviewLabel->clear();
         m_differencePreviewLabel->setText(QStringLiteral(
             "No matching differences: every source cell becomes a generated metatile."
         ));
-        const QString colorSummary = m_tilesetBuildResult.quantized
+        const int sourceColorCount = m_usingGeneratedTilesetPair
+            ? m_tilesetPairBuildResult.sourceColorCount
+            : m_tilesetBuildResult.sourceColorCount;
+        const bool quantized = m_usingGeneratedTilesetPair
+            ? m_tilesetPairBuildResult.quantized
+            : m_tilesetBuildResult.quantized;
+        const QString colorSummary = quantized
             ? QString("%1 source colors reduced to 15 visible game colors plus transparency.")
-                  .arg(m_tilesetBuildResult.sourceColorCount)
+                  .arg(sourceColorCount)
             : QString("%1 source colors fit the generated game palette.")
-                  .arg(m_tilesetBuildResult.sourceColorCount);
+                  .arg(sourceColorCount);
+        if (m_usingGeneratedTilesetPair) {
+            m_analysisSummary->setPlainText(QString(
+                "DUAL GENERATED TILESETS READY\n\n"
+                "Map:\n%1 × %2 blocks\n\n"
+                "Primary:\n%3 tiles, %4 metatiles\n\n"
+                "Secondary:\n%5 tiles, %6 metatiles\n\n"
+                "Palette:\n%7\n\n"
+                "Status:\nThe map was partitioned across both native tileset roles."
+            ).arg(mapSize.width())
+             .arg(mapSize.height())
+             .arg(m_tilesetPairBuildResult.primary.uniqueTileCount)
+             .arg(m_tilesetPairBuildResult.primary.uniqueMetatileCount)
+             .arg(m_tilesetPairBuildResult.secondary.uniqueTileCount)
+             .arg(m_tilesetPairBuildResult.secondary.uniqueMetatileCount)
+             .arg(colorSummary));
+        } else {
         m_analysisSummary->setPlainText(QString(
             "GENERATED TILESET READY\n\n"
             "Map:\n%1 × %2 blocks\n\n"
@@ -512,6 +561,7 @@ void NewMapFromImageDialog::runAnalysis()
          .arg(colorSummary)
          .arg(secondary ? QStringLiteral("Secondary") : QStringLiteral("Primary"))
          .arg(pairedTilesetLabel));
+        }
         m_fuzzyMatchButton->setEnabled(false);
         m_reviewUnmatchedButton->setEnabled(false);
         m_renderResult = {};
@@ -915,7 +965,7 @@ void NewMapFromImageDialog::createMapFromMatch()
 void NewMapFromImageDialog::createMapWithGeneratedTileset()
 {
     runAnalysis();
-    if (!m_tilesetBuildResult.isValid()) {
+    if (!m_tilesetBuildResult.isValid() && !m_tilesetPairBuildResult.isValid()) {
         QMessageBox::warning(
             this,
             QStringLiteral("Cannot Create Tileset"),
@@ -927,6 +977,12 @@ void NewMapFromImageDialog::createMapWithGeneratedTileset()
     const QString mapName = m_mapName->text().trimmed();
     const QString mapGroup = m_mapGroup->currentText().trimmed();
     const QString tilesetName = m_newTilesetName->text().trimmed();
+    const QString primaryTilesetName = m_usingGeneratedTilesetPair
+        ? tilesetName + QStringLiteral("Primary")
+        : tilesetName;
+    const QString secondaryTilesetName = m_usingGeneratedTilesetPair
+        ? tilesetName + QStringLiteral("Secondary")
+        : tilesetName;
     const QString tilesetPrefix =
         projectConfig.getIdentifier(ProjectIdentifier::symbol_tilesets_prefix);
     if (mapName.isEmpty() || !m_project->isValidNewIdentifier(mapName)) {
@@ -948,13 +1004,25 @@ void NewMapFromImageDialog::createMapWithGeneratedTileset()
         );
         return;
     }
-    if (!tilesetName.startsWith(tilesetPrefix)
-        || !m_project->isValidNewIdentifier(tilesetName)) {
+    const bool tilesetNamesValid = m_usingGeneratedTilesetPair
+        ? primaryTilesetName.startsWith(tilesetPrefix)
+            && secondaryTilesetName.startsWith(tilesetPrefix)
+            && m_project->isValidNewIdentifier(primaryTilesetName)
+            && m_project->isValidNewIdentifier(secondaryTilesetName)
+            && primaryTilesetName != secondaryTilesetName
+        : tilesetName.startsWith(tilesetPrefix)
+            && m_project->isValidNewIdentifier(tilesetName);
+    if (!tilesetNamesValid) {
         QMessageBox::warning(
             this,
             QStringLiteral("Cannot Create Tileset"),
-            QString("Tileset name '%1' must begin with '%2' and be a valid, unused identifier.")
-                .arg(tilesetName, tilesetPrefix)
+            m_usingGeneratedTilesetPair
+                ? QString(
+                    "Generated names '%1' and '%2' must be valid, unused identifiers. "
+                    "Choose a different base name."
+                  ).arg(primaryTilesetName, secondaryTilesetName)
+                : QString("Tileset name '%1' must begin with '%2' and be a valid, unused identifier.")
+                    .arg(tilesetName, tilesetPrefix)
         );
         return;
     }
@@ -974,8 +1042,7 @@ void NewMapFromImageDialog::createMapWithGeneratedTileset()
     const QString pairedTilesetLabel = secondary
         ? m_primaryTileset->currentText()
         : m_secondaryTileset->currentText();
-    Tileset *pairedTileset = m_project->getTileset(pairedTilesetLabel);
-    if (!pairedTileset) {
+    if (!m_usingGeneratedTilesetPair && !m_project->getTileset(pairedTilesetLabel)) {
         QMessageBox::warning(
             this,
             QStringLiteral("Cannot Create Tileset"),
@@ -984,67 +1051,107 @@ void NewMapFromImageDialog::createMapWithGeneratedTileset()
         return;
     }
 
-    const QSize mapSize = m_tilesetBuildResult.mapSize;
+    const QSize mapSize = m_usingGeneratedTilesetPair
+        ? m_tilesetPairBuildResult.mapSize
+        : m_tilesetBuildResult.mapSize;
+    const QVector<uint16_t> &mapMetatileIds = m_usingGeneratedTilesetPair
+        ? m_tilesetPairBuildResult.mapMetatileIds
+        : m_tilesetBuildResult.mapMetatileIds;
     Blockdata importedBlockdata;
-    importedBlockdata.reserve(m_tilesetBuildResult.mapMetatileIds.size());
-    for (uint16_t metatileId : m_tilesetBuildResult.mapMetatileIds) {
+    importedBlockdata.reserve(mapMetatileIds.size());
+    for (uint16_t metatileId : mapMetatileIds) {
         importedBlockdata.append(Block(metatileId, 0, 0));
     }
     if (!reviewCollisionSuggestions(&importedBlockdata, mapSize)) {
         return;
     }
 
+    const QString creationSummary = m_usingGeneratedTilesetPair
+        ? QString(
+            "Create primary tileset '%1' (%2 tiles, %3 metatiles) and secondary tileset "
+            "'%4' (%5 tiles, %6 metatiles), then create map '%7' in group '%8'?"
+          ).arg(primaryTilesetName)
+           .arg(m_tilesetPairBuildResult.primary.uniqueTileCount)
+           .arg(m_tilesetPairBuildResult.primary.uniqueMetatileCount)
+           .arg(secondaryTilesetName)
+           .arg(m_tilesetPairBuildResult.secondary.uniqueTileCount)
+           .arg(m_tilesetPairBuildResult.secondary.uniqueMetatileCount)
+           .arg(mapName, mapGroup)
+        : QString(
+            "Create %1 tileset '%2' with %3 unique tiles and %4 unique metatiles, "
+            "then create map '%5' in group '%6'?"
+          ).arg(secondary ? QStringLiteral("secondary") : QStringLiteral("primary"))
+           .arg(tilesetName)
+           .arg(m_tilesetBuildResult.uniqueTileCount)
+           .arg(m_tilesetBuildResult.uniqueMetatileCount)
+           .arg(mapName, mapGroup);
     const auto confirmation = QMessageBox::question(
         this,
         QStringLiteral("Create Tileset and Map From Image"),
         QString(
-            "Create %1 tileset '%2' with %3 unique tiles and %4 unique metatiles, "
-            "then create map '%5' in group '%6'?\n\n"
+            "%1\n\n"
             "The tileset graphics, palettes, metatiles, attributes, and project declarations "
             "will be written immediately. Save the new map before building the ROM."
-        ).arg(secondary ? QStringLiteral("secondary") : QStringLiteral("primary"))
-         .arg(tilesetName)
-         .arg(m_tilesetBuildResult.uniqueTileCount)
-         .arg(m_tilesetBuildResult.uniqueMetatileCount)
-         .arg(mapName, mapGroup),
+        ).arg(creationSummary),
         QMessageBox::Yes | QMessageBox::Cancel,
         QMessageBox::Cancel
     );
     if (confirmation != QMessageBox::Yes) return;
 
-    Tileset *generatedTileset = m_project->createNewTileset(
-        tilesetName,
-        secondary,
+    const auto createGeneratedTileset = [this](
+        const QString &name,
+        bool isSecondary,
+        const ImageTilesetBuilder::Result &result) {
+        return m_project->createNewTileset(
+        name,
+        isSecondary,
         false,
-        [this, secondary](Tileset *tileset) {
-            QImage tilesImage = m_tilesetBuildResult.tilesImage;
+        [&result, isSecondary](Tileset *tileset) {
+            QImage tilesImage = result.tilesImage;
             if (!tileset->loadTilesImage(&tilesImage)) return false;
 
             QList<Metatile *> generatedMetatiles;
-            generatedMetatiles.reserve(m_tilesetBuildResult.metatiles.size());
-            for (const Metatile &metatile : m_tilesetBuildResult.metatiles) {
+            generatedMetatiles.reserve(result.metatiles.size());
+            for (const Metatile &metatile : result.metatiles) {
                 generatedMetatiles.append(new Metatile(metatile));
             }
             tileset->setMetatiles(generatedMetatiles);
 
-            const int paletteId = secondary ? Project::getNumPalettesPrimary() : 0;
+            const int paletteId = isSecondary ? Project::getNumPalettesPrimary() : 0;
             if (paletteId < 0
                 || paletteId >= tileset->palettes.size()
                 || paletteId >= tileset->palettePreviews.size()) {
                 return false;
             }
-            tileset->palettes[paletteId] = m_tilesetBuildResult.palette;
-            tileset->palettePreviews[paletteId] = m_tilesetBuildResult.palette;
+            tileset->palettes[paletteId] = result.palette;
+            tileset->palettePreviews[paletteId] = result.palette;
             return true;
         }
-    );
-    if (!generatedTileset) {
+        );
+    };
+
+    Tileset *generatedPrimary = nullptr;
+    Tileset *generatedSecondary = nullptr;
+    if (m_usingGeneratedTilesetPair) {
+        generatedPrimary = createGeneratedTileset(
+            primaryTilesetName, false, m_tilesetPairBuildResult.primary);
+        if (generatedPrimary) {
+            generatedSecondary = createGeneratedTileset(
+                secondaryTilesetName, true, m_tilesetPairBuildResult.secondary);
+        }
+    } else if (secondary) {
+        generatedSecondary = createGeneratedTileset(tilesetName, true, m_tilesetBuildResult);
+    } else {
+        generatedPrimary = createGeneratedTileset(tilesetName, false, m_tilesetBuildResult);
+    }
+    if ((m_usingGeneratedTilesetPair && (!generatedPrimary || !generatedSecondary))
+        || (!m_usingGeneratedTilesetPair && !generatedPrimary && !generatedSecondary)) {
         QMessageBox::critical(
             this,
             QStringLiteral("Tileset Creation Failed"),
             QStringLiteral(
-                "Porymap could not create and save the generated tileset. "
-                "It was not registered in the project; check the application log for rollback details."
+                "Porymap could not create and save all required generated tilesets. "
+                "Any tileset already completed remains valid; check the application log for details."
             )
         );
         return;
@@ -1059,8 +1166,12 @@ void NewMapFromImageDialog::createMapWithGeneratedTileset()
     settings.layout.folderName = mapName;
     settings.layout.width = mapSize.width();
     settings.layout.height = mapSize.height();
-    settings.layout.primaryTilesetLabel = secondary ? pairedTilesetLabel : tilesetName;
-    settings.layout.secondaryTilesetLabel = secondary ? tilesetName : pairedTilesetLabel;
+    settings.layout.primaryTilesetLabel = m_usingGeneratedTilesetPair
+        ? primaryTilesetName
+        : (secondary ? pairedTilesetLabel : tilesetName);
+    settings.layout.secondaryTilesetLabel = m_usingGeneratedTilesetPair
+        ? secondaryTilesetName
+        : (secondary ? tilesetName : pairedTilesetLabel);
 
     Map *map = m_project->createNewMap(settings, importedBlockdata);
     if (!map) {
@@ -1440,11 +1551,13 @@ void NewMapFromImageDialog::updateTilesetSourceControls()
 {
     const bool generated = m_createTilesetFromImage->isChecked();
     const bool secondary = m_newTilesetType->currentIndex() == 1;
+    const bool split = generated && m_splitTilesetsIfNeeded->isChecked();
     m_newTilesetName->setEnabled(generated);
     m_newTilesetType->setEnabled(generated);
+    m_splitTilesetsIfNeeded->setEnabled(generated);
     m_newTilesetHelp->setEnabled(generated);
-    m_primaryTileset->setEnabled(!generated || secondary);
-    m_secondaryTileset->setEnabled(!generated || !secondary);
+    m_primaryTileset->setEnabled(!generated || (secondary && !split));
+    m_secondaryTileset->setEnabled(!generated || (!secondary && !split));
     m_fuzzyMatchButton->setVisible(!generated);
     m_reviewUnmatchedButton->setVisible(!generated);
 }
@@ -1469,7 +1582,7 @@ void NewMapFromImageDialog::updateCreateButton()
 {
     m_createMapButton->setEnabled(
         m_createTilesetFromImage->isChecked()
-            ? m_tilesetBuildResult.isValid()
+            ? (m_tilesetBuildResult.isValid() || m_tilesetPairBuildResult.isValid())
             : allCellsResolved()
     );
 }

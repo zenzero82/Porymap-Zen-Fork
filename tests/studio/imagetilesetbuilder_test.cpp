@@ -54,15 +54,15 @@ void testDeduplicatesTilesAndMetatiles()
     expect(result.isValid(), "solid aligned image should build");
     expect(result.mapSize == QSize(2, 1), "map dimensions should use the metatile grid");
     expect(result.uniqueTileCount == 2, "identical source tiles should share one entry after transparent tile zero");
-    expect(result.uniqueMetatileCount == 1, "identical metatiles should be deduplicated");
+    expect(result.uniqueMetatileCount == 2, "transparent metatile zero and the source metatile should be stored");
     expect(
-        result.mapMetatileIds == QVector<uint16_t>({300, 300}),
+        result.mapMetatileIds == QVector<uint16_t>({301, 301}),
         "map cells should reference the deduplicated metatile"
     );
-    expect(result.metatiles.first().tiles.size() == 8, "project layer count should be preserved");
+    expect(result.metatiles.at(1).tiles.size() == 8, "project layer count should be preserved");
     bool tileReferencesValid = true;
-    for (int index = 0; index < result.metatiles.first().tiles.size(); index++) {
-        const Tile &tile = result.metatiles.first().tiles.at(index);
+    for (int index = 0; index < result.metatiles.at(1).tiles.size(); index++) {
+        const Tile &tile = result.metatiles.at(1).tiles.at(index);
         const uint16_t expectedTileId = index < Metatile::tilesPerLayer() ? 101 : 100;
         tileReferencesValid = tileReferencesValid
             && tile.tileId == expectedTileId
@@ -130,6 +130,33 @@ void testCapacityFailuresAreExplicit()
     expect(result.errorMessage.contains("2 tiles"), "tile overflow should report project capacity");
 }
 
+void testSplitsOverflowAcrossBothRoles()
+{
+    QImage image(32, 16, QImage::Format_ARGB32);
+    image.fill(Qt::transparent);
+    for (int y = 0; y < image.height(); y++) {
+        for (int x = 0; x < 16; x++) image.setPixel(x, y, qRgb(255, 0, 0));
+        for (int x = 16; x < 32; x++) image.setPixel(x, y, qRgb(0, 255, 0));
+    }
+
+    auto primary = options();
+    primary.maxTiles = 2;
+    auto secondary = options();
+    secondary.maxTiles = 2;
+    secondary.tileIdBase = 200;
+    secondary.metatileIdBase = 700;
+    secondary.paletteId = 7;
+
+    Studio::ImageTilesetBuilder builder;
+    expect(!builder.build(image, primary).isValid(), "one role should overflow");
+    const auto pair = builder.buildPair(image, primary, secondary);
+    expect(pair.isValid(), "the same image should fit when split across both roles");
+    expect(pair.primary.uniqueTileCount == 2, "primary should stay within its tile limit");
+    expect(pair.secondary.uniqueTileCount == 2, "secondary should stay within its tile limit");
+    expect(pair.mapMetatileIds == QVector<uint16_t>({301, 701}),
+           "map cells should reference their assigned tileset role");
+}
+
 } // namespace
 
 int main()
@@ -139,6 +166,7 @@ int main()
     testOpaquePixelsNeverUseTransparentIndex();
     testTransparentPixelsUseIndexZero();
     testCapacityFailuresAreExplicit();
+    testSplitsOverflowAcrossBothRoles();
 
     if (failures == 0) {
         std::cout << "All image tileset builder tests passed.\n";

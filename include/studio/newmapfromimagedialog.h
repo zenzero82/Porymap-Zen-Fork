@@ -49,6 +49,8 @@ private:
     ImageMetatileMatcher::Result m_matchResult;
     ImageTilesetBuilder m_tilesetBuilder;
     ImageTilesetBuilder::Result m_tilesetBuildResult;
+    ImageTilesetBuilder::PairResult m_tilesetPairBuildResult;
+    bool m_usingGeneratedTilesetPair = false;
     QImage m_analysisReconstructedImage;
     QImage m_analysisDifferenceImage;
 
@@ -69,6 +71,7 @@ private:
     QComboBox *m_primaryTileset = nullptr;
     QComboBox *m_secondaryTileset = nullptr;
     QCheckBox *m_createTilesetFromImage = nullptr;
+    QCheckBox *m_splitTilesetsIfNeeded = nullptr;
     QLineEdit *m_newTilesetName = nullptr;
     QComboBox *m_newTilesetType = nullptr;
     QLabel *m_newTilesetHelp = nullptr;

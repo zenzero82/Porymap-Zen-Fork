@@ -233,7 +233,27 @@ ImageTilesetBuilder::Result ImageTilesetBuilder::build(
         sourceImage.width() / Metatile::pixelWidth(),
         sourceImage.height() / Metatile::pixelHeight()
     );
-    result.palette = buildPalette(sourceImage, &result.sourceColorCount, &result.quantized);
+    if (options.paletteOverride.isEmpty()) {
+        result.palette = buildPalette(sourceImage, &result.sourceColorCount, &result.quantized);
+    } else {
+        if (options.paletteOverride.size() != Tileset::numColorsPerPalette()) {
+            result.errorMessage = QStringLiteral("The supplied palette override must contain exactly 16 colors.");
+            return result;
+        }
+        result.palette = options.paletteOverride;
+        QHash<QRgb, bool> sourceColors;
+        const QImage normalized = sourceImage.convertToFormat(QImage::Format_ARGB32);
+        for (int y = 0; y < normalized.height(); y++) {
+            const QRgb *line = reinterpret_cast<const QRgb *>(normalized.constScanLine(y));
+            for (int x = 0; x < normalized.width(); x++) {
+                if (qAlpha(line[x]) >= 128) {
+                    sourceColors.insert(qRgb(qRed(line[x]), qGreen(line[x]), qBlue(line[x])), true);
+                }
+            }
+        }
+        result.sourceColorCount = sourceColors.size();
+        result.quantized = sourceColors.size() > Tileset::numColorsPerPalette() - 1;
+    }
     result.indexedSource = indexImage(sourceImage, result.palette);
 
     QHash<QByteArray, int> tileIndices;
@@ -244,6 +264,14 @@ ImageTilesetBuilder::Result ImageTilesetBuilder::build(
     tileIndices.insert(imageKey(transparentTile), 0);
     uniqueTiles.append(transparentTile);
     QHash<QByteArray, int> metatileIndices;
+    QVector<uint16_t> blankTileIds(options.tilesPerMetatile, options.tileIdBase);
+    const QByteArray blankMetatileKey = metatileKey(blankTileIds);
+    metatileIndices.insert(blankMetatileKey, 0);
+    Metatile blankMetatile;
+    for (uint16_t tileId : blankTileIds) {
+        blankMetatile.tiles.append(Tile(tileId, false, false, options.paletteId));
+    }
+    result.metatiles.append(blankMetatile);
     for (int cellY = 0; cellY < result.mapSize.height(); cellY++) {
         for (int cellX = 0; cellX < result.mapSize.width(); cellX++) {
             QVector<uint16_t> tileIds;
@@ -275,6 +303,9 @@ ImageTilesetBuilder::Result ImageTilesetBuilder::build(
                 }
             }
 
+            while (tileIds.size() < options.tilesPerMetatile) {
+                tileIds.append(static_cast<uint16_t>(options.tileIdBase));
+            }
             const QByteArray key = metatileKey(tileIds);
             auto metatileIt = metatileIndices.constFind(key);
             int metatileIndex = -1;
@@ -289,9 +320,6 @@ ImageTilesetBuilder::Result ImageTilesetBuilder::build(
                 Metatile metatile;
                 for (uint16_t tileId : tileIds) {
                     metatile.tiles.append(Tile(tileId, false, false, options.paletteId));
-                }
-                while (metatile.tiles.size() < options.tilesPerMetatile) {
-                    metatile.tiles.append(Tile(options.tileIdBase, false, false, options.paletteId));
                 }
                 metatileIndices.insert(key, metatileIndex);
                 result.metatiles.append(metatile);
@@ -327,6 +355,236 @@ ImageTilesetBuilder::Result ImageTilesetBuilder::build(
         }
     }
     return result;
+}
+
+ImageTilesetBuilder::PairResult ImageTilesetBuilder::buildPair(
+    const QImage &sourceImage,
+    const Options &primaryOptions,
+    const Options &secondaryOptions) const
+{
+    PairResult pair;
+    if (sourceImage.isNull()) {
+        pair.errorMessage = QStringLiteral("The source image is empty.");
+        return pair;
+    }
+    if ((sourceImage.width() % Metatile::pixelWidth()) != 0
+        || (sourceImage.height() % Metatile::pixelHeight()) != 0) {
+        pair.errorMessage = QString(
+            "Image size %1 × %2 px must align to the %3 × %4 px metatile grid."
+        ).arg(sourceImage.width())
+         .arg(sourceImage.height())
+         .arg(Metatile::pixelWidth())
+         .arg(Metatile::pixelHeight());
+        return pair;
+    }
+    const auto optionsAreValid = [](const Options &options) {
+        return options.maxTiles > 0
+            && options.maxMetatiles > 0
+            && options.tileIdBase >= 0
+            && options.metatileIdBase >= 0
+            && options.paletteId >= 0
+            && options.paletteId < Tileset::maxPalettes()
+            && options.tilesPerMetatile >= Metatile::tilesPerLayer();
+    };
+    if (!optionsAreValid(primaryOptions) || !optionsAreValid(secondaryOptions)) {
+        pair.errorMessage = QStringLiteral("The project supplied invalid dual-tileset capacity settings.");
+        return pair;
+    }
+
+    pair.mapSize = QSize(
+        sourceImage.width() / Metatile::pixelWidth(),
+        sourceImage.height() / Metatile::pixelHeight()
+    );
+    const QList<QRgb> palette = buildPalette(
+        sourceImage,
+        &pair.sourceColorCount,
+        &pair.quantized
+    );
+    const QImage indexedSource = indexImage(sourceImage, palette);
+
+    struct RoleState {
+        Options options;
+        QHash<QByteArray, int> tileIndices;
+        QVector<QImage> tiles;
+        QHash<QByteArray, int> metatileIndices;
+    };
+    const auto initializeRole = [&palette](const Options &options) {
+        RoleState state;
+        state.options = options;
+        QImage transparentTile(Tile::pixelSize(), QImage::Format_Indexed8);
+        transparentTile.setColorTable(palette.toVector());
+        transparentTile.fill(0);
+        state.tileIndices.insert(imageKey(transparentTile), 0);
+        state.tiles.append(transparentTile);
+        QVector<uint16_t> blankTileIds(options.tilesPerMetatile, options.tileIdBase);
+        state.metatileIndices.insert(metatileKey(blankTileIds), 0);
+        return state;
+    };
+    RoleState primaryState = initializeRole(primaryOptions);
+    RoleState secondaryState = initializeRole(secondaryOptions);
+
+    struct CellData {
+        QVector<QImage> tiles;
+        QVector<QByteArray> keys;
+    };
+    const auto cellDataAt = [&indexedSource](int cellX, int cellY) {
+        CellData cell;
+        for (int tileY = 0; tileY < Metatile::tileHeight(); tileY++) {
+            for (int tileX = 0; tileX < Metatile::tileWidth(); tileX++) {
+                const QImage tileImage = indexedSource.copy(
+                    (cellX * Metatile::tileWidth() + tileX) * Tile::pixelWidth(),
+                    (cellY * Metatile::tileHeight() + tileY) * Tile::pixelHeight(),
+                    Tile::pixelWidth(),
+                    Tile::pixelHeight()
+                );
+                cell.tiles.append(tileImage);
+                cell.keys.append(imageKey(tileImage));
+            }
+        }
+        return cell;
+    };
+
+    struct Projection {
+        bool fits = false;
+        int tileCount = 0;
+        int metatileCount = 0;
+        QVector<int> localTileIndices;
+        QByteArray metatileKey;
+    };
+    const auto projectCell = [](const RoleState &state, const CellData &cell) {
+        Projection projection;
+        projection.localTileIndices.reserve(cell.keys.size());
+        QHash<QByteArray, int> pendingTiles;
+        int newTileCount = 0;
+        for (const QByteArray &key : cell.keys) {
+            auto existing = state.tileIndices.constFind(key);
+            if (existing != state.tileIndices.cend()) {
+                projection.localTileIndices.append(existing.value());
+                continue;
+            }
+            auto pending = pendingTiles.constFind(key);
+            if (pending == pendingTiles.cend()) {
+                const int localIndex = state.tiles.size() + newTileCount;
+                pendingTiles.insert(key, localIndex);
+                projection.localTileIndices.append(localIndex);
+                newTileCount++;
+            } else {
+                projection.localTileIndices.append(pending.value());
+            }
+        }
+        projection.tileCount = state.tiles.size() + newTileCount;
+        if (projection.tileCount > state.options.maxTiles) return projection;
+
+        QVector<uint16_t> globalTileIds;
+        globalTileIds.reserve(state.options.tilesPerMetatile);
+        for (int localIndex : projection.localTileIndices) {
+            globalTileIds.append(static_cast<uint16_t>(state.options.tileIdBase + localIndex));
+        }
+        while (globalTileIds.size() < state.options.tilesPerMetatile) {
+            globalTileIds.append(static_cast<uint16_t>(state.options.tileIdBase));
+        }
+        projection.metatileKey = metatileKey(globalTileIds);
+        projection.metatileCount = state.metatileIndices.size()
+            + (state.metatileIndices.contains(projection.metatileKey) ? 0 : 1);
+        projection.fits = projection.metatileCount <= state.options.maxMetatiles;
+        return projection;
+    };
+    const auto appendCell = [](RoleState *state, const CellData &cell, const Projection &projection) {
+        for (int index = 0; index < cell.keys.size(); index++) {
+            const QByteArray &key = cell.keys.at(index);
+            if (!state->tileIndices.contains(key)) {
+                const int localIndex = state->tiles.size();
+                state->tileIndices.insert(key, localIndex);
+                state->tiles.append(cell.tiles.at(index));
+            }
+        }
+        auto metatile = state->metatileIndices.constFind(projection.metatileKey);
+        if (metatile != state->metatileIndices.cend()) {
+            return state->options.metatileIdBase + metatile.value();
+        }
+        const int localMetatileIndex = state->metatileIndices.size();
+        state->metatileIndices.insert(projection.metatileKey, localMetatileIndex);
+        return state->options.metatileIdBase + localMetatileIndex;
+    };
+    const auto projectionScore = [](const RoleState &state, const Projection &projection) {
+        const double tileRatio = static_cast<double>(projection.tileCount) / state.options.maxTiles;
+        const double metatileRatio =
+            static_cast<double>(projection.metatileCount) / state.options.maxMetatiles;
+        return qMax(tileRatio, metatileRatio);
+    };
+
+    QImage primarySource(sourceImage.size(), QImage::Format_ARGB32);
+    QImage secondarySource(sourceImage.size(), QImage::Format_ARGB32);
+    primarySource.fill(Qt::transparent);
+    secondarySource.fill(Qt::transparent);
+    const QImage normalizedSource = sourceImage.convertToFormat(QImage::Format_ARGB32);
+    QVector<bool> secondaryAssignments;
+    secondaryAssignments.reserve(pair.mapSize.width() * pair.mapSize.height());
+
+    for (int cellY = 0; cellY < pair.mapSize.height(); cellY++) {
+        for (int cellX = 0; cellX < pair.mapSize.width(); cellX++) {
+            const CellData cell = cellDataAt(cellX, cellY);
+            const Projection primaryProjection = projectCell(primaryState, cell);
+            const Projection secondaryProjection = projectCell(secondaryState, cell);
+            if (!primaryProjection.fits && !secondaryProjection.fits) {
+                pair.errorMessage = QString(
+                    "The image cannot be split within the combined primary and secondary limits "
+                    "at map cell (%1, %2)."
+                ).arg(cellX).arg(cellY);
+                return pair;
+            }
+
+            const bool useSecondary =
+                !primaryProjection.fits
+                || (secondaryProjection.fits
+                    && projectionScore(secondaryState, secondaryProjection)
+                        < projectionScore(primaryState, primaryProjection));
+            RoleState *state = useSecondary ? &secondaryState : &primaryState;
+            const Projection &projection =
+                useSecondary ? secondaryProjection : primaryProjection;
+            pair.mapMetatileIds.append(static_cast<uint16_t>(appendCell(state, cell, projection)));
+            secondaryAssignments.append(useSecondary);
+
+            QImage *roleSource = useSecondary ? &secondarySource : &primarySource;
+            const QRect cellRect(
+                cellX * Metatile::pixelWidth(),
+                cellY * Metatile::pixelHeight(),
+                Metatile::pixelWidth(),
+                Metatile::pixelHeight()
+            );
+            for (int y = 0; y < cellRect.height(); y++) {
+                memcpy(
+                    roleSource->scanLine(cellRect.y() + y) + cellRect.x() * 4,
+                    normalizedSource.constScanLine(cellRect.y() + y) + cellRect.x() * 4,
+                    cellRect.width() * 4
+                );
+            }
+        }
+    }
+
+    Options primaryBuildOptions = primaryOptions;
+    primaryBuildOptions.paletteOverride = palette;
+    Options secondaryBuildOptions = secondaryOptions;
+    secondaryBuildOptions.paletteOverride = palette;
+    pair.primary = build(primarySource, primaryBuildOptions);
+    pair.secondary = build(secondarySource, secondaryBuildOptions);
+    if (!pair.primary.isValid()) {
+        pair.errorMessage = QString("Primary tileset generation failed: %1")
+            .arg(pair.primary.errorMessage);
+        return pair;
+    }
+    if (!pair.secondary.isValid()) {
+        pair.errorMessage = QString("Secondary tileset generation failed: %1")
+            .arg(pair.secondary.errorMessage);
+        return pair;
+    }
+
+    for (int index = 0; index < secondaryAssignments.size(); index++) {
+        pair.mapMetatileIds[index] = secondaryAssignments.at(index)
+            ? pair.secondary.mapMetatileIds.at(index)
+            : pair.primary.mapMetatileIds.at(index);
+    }
+    return pair;
 }
 
 } // namespace Studio
