@@ -159,6 +159,37 @@ void testSplitsOverflowAcrossBothRoles()
            "map cells should reference their assigned tileset role");
 }
 
+void testExplainsCombinedCapacityBeforePacking()
+{
+    QImage image(64, 16, QImage::Format_ARGB32);
+    const QRgb colors[] = {
+        qRgb(255, 0, 0), qRgb(0, 255, 0),
+        qRgb(0, 0, 255), qRgb(255, 255, 0)
+    };
+    for (int y = 0; y < image.height(); y++) {
+        for (int x = 0; x < image.width(); x++) {
+            image.setPixel(x, y, colors[x / 16]);
+        }
+    }
+    auto primary = options();
+    primary.maxTiles = primary.maxMetatiles = 2;
+    auto secondary = primary;
+    secondary.tileIdBase = 200;
+    secondary.metatileIdBase = 700;
+    secondary.paletteId = 7;
+
+    const auto result = Studio::ImageTilesetBuilder().buildPair(
+        image, primary, secondary
+    );
+    expect(!result.isValid(), "artwork exceeding combined role capacity must fail");
+    expect(result.errorMessage.contains("4 distinct 8"),
+           "failure should report unique tiles after palette conversion");
+    expect(result.errorMessage.contains("6 tile slots"),
+           "failure should account for both reserved transparent tiles");
+    expect(result.errorMessage.contains("4 tile slots"),
+           "failure should report the project-specific combined tile budget");
+}
+
 void testPackagesMixedAssetSizes()
 {
     QTemporaryDir directory;
@@ -189,6 +220,7 @@ int main()
     testTransparentPixelsUseIndexZero();
     testCapacityFailuresAreExplicit();
     testSplitsOverflowAcrossBothRoles();
+    testExplainsCombinedCapacityBeforePacking();
     testPackagesMixedAssetSizes();
 
     if (failures == 0) {

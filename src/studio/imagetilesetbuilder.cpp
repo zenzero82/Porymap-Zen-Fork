@@ -5,6 +5,7 @@
 
 #include <QByteArray>
 #include <QHash>
+#include <QSet>
 
 #include <algorithm>
 #include <cstring>
@@ -401,6 +402,56 @@ ImageTilesetBuilder::PairResult ImageTilesetBuilder::buildPair(
         &pair.quantized
     );
     const QImage indexedSource = indexImage(sourceImage, palette);
+
+    // This is a lower bound, independent of how the cells are assigned to
+    // roles: both roles reserve a transparent tile and metatile. Splitting
+    // may duplicate additional tiles, so exceeding this bound is conclusive.
+    QSet<QByteArray> uniqueTiles;
+    QSet<QByteArray> uniqueMetatiles;
+    const QByteArray blankTile(Tile::pixelWidth() * Tile::pixelHeight(), '\0');
+    const QByteArray blankMetatile(
+        Metatile::pixelWidth() * Metatile::pixelHeight(), '\0'
+    );
+    for (int y = 0; y < indexedSource.height(); y += Tile::pixelHeight()) {
+        for (int x = 0; x < indexedSource.width(); x += Tile::pixelWidth()) {
+            uniqueTiles.insert(imageKey(indexedSource.copy(
+                x, y, Tile::pixelWidth(), Tile::pixelHeight()
+            )));
+        }
+    }
+    for (int y = 0; y < indexedSource.height(); y += Metatile::pixelHeight()) {
+        for (int x = 0; x < indexedSource.width(); x += Metatile::pixelWidth()) {
+            uniqueMetatiles.insert(imageKey(indexedSource.copy(
+                x, y, Metatile::pixelWidth(), Metatile::pixelHeight()
+            )));
+        }
+    }
+    const int requiredTileSlots =
+        uniqueTiles.size() - (uniqueTiles.contains(blankTile) ? 1 : 0) + 2;
+    const int requiredMetatileSlots =
+        uniqueMetatiles.size() - (uniqueMetatiles.contains(blankMetatile) ? 1 : 0) + 2;
+    const int availableTileSlots = primaryOptions.maxTiles + secondaryOptions.maxTiles;
+    const int availableMetatileSlots =
+        primaryOptions.maxMetatiles + secondaryOptions.maxMetatiles;
+    if (requiredTileSlots > availableTileSlots
+        || requiredMetatileSlots > availableMetatileSlots) {
+        pair.errorMessage = QString(
+            "This image has %1 distinct 8 × 8 tiles and %2 distinct 16 × 16 cells "
+            "after conversion to the supported 15 visible colors. Including the "
+            "transparent entry reserved in each role, it needs at least %3 tile "
+            "slots and %4 metatile slots; this project's primary and secondary "
+            "tilesets have only %5 tile slots and %6 metatile slots combined. "
+            "A map can use only one primary and one secondary tileset. Select a "
+            "smaller subset of this atlas (for example, one terrain theme) and "
+            "import it separately; splitting the entire image cannot fit."
+        ).arg(uniqueTiles.size())
+         .arg(uniqueMetatiles.size())
+         .arg(requiredTileSlots)
+         .arg(requiredMetatileSlots)
+         .arg(availableTileSlots)
+         .arg(availableMetatileSlots);
+        return pair;
+    }
 
     struct RoleState {
         Options options;
